@@ -258,8 +258,8 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
             <button class="mini-op" onclick="$('itemsSearchInput').value='';filterItems('');">清空</button>
             <span style="font-size:2.8vw;color:rgba(255,255,255,.7);margin-left:2vw;">📄 跳页：</span>
             <button class="mini-op" id="_libraryWayShop" onclick="goItemsPage('lib', -1)" title="上一页" style="padding:1vw 1.5vw;">◀</button>
-            <input id="itemsPageJump" type="number" min="1" placeholder="页码" style="width:80px;padding:1vw 1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:3vw;text-align:center;" onkeydown="if(event.key==='Enter'){jumpItemsPage($('itemsPageJump').value)}">
-            <button class="mini-op" onclick="jumpItemsPage($('itemsPageJump').value)">Go</button>
+            <input id="itemsPageJump" type="number" min="1" placeholder="页码" style="width:80px;padding:1vw 1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:3vw;text-align:center;" onkeydown="if(event.key==='Enter'){jumpItemsPage('lib', $('itemsPageJump').value)}">
+            <button class="mini-op" onclick="jumpItemsPage('lib', $('itemsPageJump').value)">Go</button>
             <button class="mini-op" id="_libraryWayShop2" onclick="goItemsPage('lib', 1)" title="下一页" style="padding:1vw 1.5vw;">▶</button>
           </div>
           <div id="libraryList" style="overflow-x:auto;"><div class="empty">加载中…</div></div>
