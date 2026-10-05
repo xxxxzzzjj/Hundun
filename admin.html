@@ -1861,7 +1861,7 @@ function renderLibraryRow(it) {
 function renderShopRow(it) {
   const cat = it.category || 'item';
   const catLabel = catLabelOf(cat);
-  const remain = (typeof it.stock === 'number') ? Math.max(0, it.stock - (it.qty_sold || 0)) : null;
+  const remain = (typeof it.stock === 'number') ? Math.max(0, it.stock) : null;
   const stockTxt = (remain === null) ? '∞ 无限' : (remain > 0 ? `剩余 ${remain}` : '<span style="color:#ff4d5a;">已售罄</span>');
   const kw = ((it.name||'')+' '+(it.id||'')+' '+(it.effect||'')+' '+(it.desc||'')+' '+(it.library_id||'')).toLowerCase();
   return `<tr data-item-id="${escapeHtml(it.id)}" data-area="shop" data-keywords="${escapeHtml(kw)}">

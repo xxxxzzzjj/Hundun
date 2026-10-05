@@ -627,19 +627,47 @@ html, body {
 
 /* 商城 */
 
-.shop-grid { display:grid; grid-template-columns:1fr 1fr; gap:3vw; }
+.shop-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:2vw; }
 
-.shop-item { background:rgba(255,255,255,.08); padding:3vw;
+.shop-item { background:rgba(255,255,255,.08); padding:2vw 1.5vw 1.5vw;
 
-  border-radius:8px; text-align:center; cursor:pointer; }
+  border-radius:8px; text-align:center; cursor:pointer; position:relative; }
 
-.shop-icon { font-size:4vw; margin-bottom:1vw; width:4vw;height:4vw;margin:0 auto 1vw;display:flex;align-items:center;justify-content:center;overflow:hidden; }
+.shop-icon { width:14vw;height:14vw;max-width:64px;max-height:64px;margin:0 auto 1vw;display:flex;align-items:center;justify-content:center;overflow:hidden; }
 
-.shop-icon img { width:4vw;height:4vw;object-fit:contain; }
+.shop-icon img { width:14vw;height:14vw;max-width:64px;max-height:64px;object-fit:contain; }
 
-.shop-icon span { font-size:4vw; line-height:1; }
+.shop-icon span { font-size:10vw;line-height:1; }
 
-.shop-name { font-size:3.6vw; font-weight:bold; }
+.shop-name { font-size:3.4vw; font-weight:bold; margin-bottom:0.4vw; }
+
+/* 收藏按钮：右上角五角形 */
+.shop-fav-btn {
+  position:absolute; top:0.5vw; right:0.5vw;
+  width:5vw;height:5vw;max-width:22px;max-height:22px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:2;
+  background:transparent;border:none;padding:0;
+}
+.shop-fav-btn svg { width:100%;height:100%;display:block; }
+
+/* 底栏：放大镜（左）+ 余 xx（右），flex 同行 */
+.shop-footer {
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:0.6vw;padding:0 0.5vw;
+}
+.shop-footer .shop-stock { margin-top:0; }
+
+/* 描述按钮：左下角小放大镜图标 */
+.shop-desc-btn {
+  width:4.5vw;height:4.5vw;max-width:18px;max-height:18px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:2;
+  background:transparent;border:none;padding:0;
+  color:rgba(255,255,255,.65);
+}
+.shop-desc-btn svg { width:100%;height:100%;display:block; }
+.shop-desc-btn:hover { color:#ffd700; }
 
 .shop-price { font-size:3.2vw; color:#ffd700; margin-top:1vw; }
 
@@ -4891,6 +4919,67 @@ function bindImageUpload(fileId, textareaId, previewId) {
 
 // 玩家商场（按 category 分三个折叠区；默认折叠；数字=该类已上架商品数量）
 
+// ============ 商城收藏（localStorage，按玩家分别存）============
+function _getFavKey() { return 'shop_favorites_' + (typeof curId !== 'undefined' && curId ? curId : 'anon'); }
+function _loadFavorites() {
+  try {
+    const raw = localStorage.getItem(_getFavKey());
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+function _saveFavorites(set) {
+  try { localStorage.setItem(_getFavKey(), JSON.stringify(Array.from(set))); } catch {}
+}
+function _isFavorited(id) { return _loadFavorites().has(id); }
+function _toggleFavorite(id) {
+  const s = _loadFavorites();
+  if (s.has(id)) s.delete(id); else s.add(id);
+  _saveFavorites(s);
+}
+
+// 五角星 SVG（参数：fill 表示填充色）
+function _favStarSvg(filled) {
+  const fillColor = filled ? '#ffd700' : 'none';
+  const stroke = '#ffd700';
+  // 经典五角星：外接圆半径 9.5，中心 (12,12)，内圈半径约 3.8
+  const points = '12,2.5 14.6,9.2 21.7,9.4 16.2,13.7 18,20.5 12,16.5 6,20.5 7.8,13.7 2.3,9.4 9.4,9.2';
+  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="${points}" fill="${fillColor}" stroke="${stroke}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+}
+
+// 显示道具描述 + 是否可赠送
+function showItemDesc(it) {
+  const giftable = it.category !== 'bind';
+  const giftableText = giftable
+    ? '<span style="color:#2ee84e;">✅ 可赠送</span>'
+    : '<span style="color:#ff4d5a;">❌ 不可赠送（绑定类）</span>';
+  const body = `
+    <div style="font-size:3.4vw;color:rgba(255,255,255,.9);line-height:1.6;padding:1vw 2vw;">
+      <div style="display:flex;align-items:center;gap:2vw;margin-bottom:2vw;">
+        <div style="width:18vw;height:18vw;max-width:80px;max-height:80px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden;">
+          ${it.icon && String(it.icon).startsWith('data:image/')
+            ? `<img src="${escapeHtml(it.icon)}" style="width:100%;height:100%;object-fit:contain;">`
+            : `<span style="font-size:14vw;line-height:1;">${escapeHtml(it.icon || '📦')}</span>`}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:4.2vw;font-weight:bold;color:#ffd700;">${escapeHtml(it.name)}</div>
+          <div style="font-size:3vw;color:rgba(255,255,255,.6);margin-top:0.5vw;">价格：${it.price} 玄币</div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,.06);padding:2vw;border-radius:6px;margin-bottom:1.5vw;">
+        <div style="font-size:2.8vw;color:rgba(255,255,255,.55);margin-bottom:0.8vw;">📜 描述</div>
+        <div style="font-size:3.2vw;color:rgba(255,255,255,.85);">${escapeHtml(it.desc || '暂无描述')}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.06);padding:2vw;border-radius:6px;">
+        <div style="font-size:2.8vw;color:rgba(255,255,255,.55);margin-bottom:0.8vw;">🎁 赠送</div>
+        <div style="font-size:3.2vw;">${giftableText}</div>
+      </div>
+    </div>
+  `;
+  showModal('道具详情', body, null, '关闭', null, true);
+}
+
 async function loadShop() {
 
   // 关键：完全按 GAME_CONFIG.shop_categories_collapsed 默认状态渲染
@@ -4914,6 +5003,16 @@ async function loadShop() {
   const groups = { item: [], special: [], pet: [], material: [], bind: [] };
 
   res.items.forEach(it => { const c2 = it.category || 'item'; (groups[c2] || groups.item).push(it); });
+
+  // 关键修复：每个分组内，收藏的道具排最前
+  const favSet = _loadFavorites();
+  for (const k of Object.keys(groups)) {
+    groups[k].sort((a, b) => {
+      const af = favSet.has(a.id) ? 1 : 0;
+      const bf = favSet.has(b.id) ? 1 : 0;
+      return bf - af;  // 已收藏的 (1) 排在未收藏的 (0) 前面
+    });
+  }
 
   // 折叠区配置（顺序：物品 → 特殊 → 绑定）
 
@@ -4943,7 +5042,7 @@ async function loadShop() {
 
     _pagerSet(pageKey, list, it => {
 
-      const remain = (typeof it.stock === 'number') ? Math.max(0, it.stock - (it.qty_sold || 0)) : null;
+      const remain = (typeof it.stock === 'number') ? Math.max(0, it.stock) : null;
 
       const soldOut = remain === 0;
 
@@ -4957,17 +5056,28 @@ async function loadShop() {
 
         : `<span style="font-size:14vw;line-height:14vw;width:14vw;height:14vw;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);border-radius:12vw;">${escapeHtml(it.icon||'📦')}</span>`;
 
-      // 字号：名称(5.2vw) > 价格(4.2vw) > 剩余(3vw)
+      // 放大镜 SVG（搜索/查看图标）
+      const magGlassSvg = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="15" y1="15" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 
-      return `<div class="shop-item" data-id="${escapeHtml(it.id)}" style="${soldOut ? 'opacity:.5;pointer-events:none;' : ''}">
+      // 收藏状态（空心=未收藏，实心=已收藏）
+      const isFav = favSet.has(it.id);
+      // 序列化道具数据到 data-* 属性（描述按钮读取）
+      const itemJson = encodeURIComponent(JSON.stringify({ id: it.id, name: it.name, desc: it.desc, icon: it.icon, price: it.price, category: it.category }));
+
+      return `<div class="shop-item" data-id="${escapeHtml(it.id)}" data-item='${itemJson}' style="${soldOut ? 'opacity:.5;pointer-events:none;' : ''}">
+
+        <div class="shop-fav-btn" data-action="fav" title="${isFav ? '取消收藏' : '收藏'}">${_favStarSvg(isFav)}</div>
 
         <div class="shop-icon" style="width:14vw;height:14vw;margin:0 auto 1.5vw;display:flex;align-items:center;justify-content:center;">${iconHtml}</div>
 
-        <div class="shop-name" style="font-size:5.2vw;font-weight:bold;">${escapeHtml(it.name)}</div>
+        <div class="shop-name" style="font-size:3.4vw;font-weight:bold;line-height:1.2;">${escapeHtml(it.name)}</div>
 
-        <div class="shop-price" style="font-size:4.2vw;font-weight:bold;"><b style="color:#ffd700;">${it.price}</b> 玄币</div>
+        <div class="shop-price" style="font-size:3vw;font-weight:bold;white-space:nowrap;"><b style="color:#ffd700;">${it.price}</b> 玄币</div>
 
-        <div class="shop-stock" style="font-size:3vw;color:rgba(255,255,255,.5);">${remain === null ? '∞ 无限' : (remain > 0 ? `剩余 ${remain}` : '<span style="color:#ff4d5a;">已售罄</span>')}</div>
+        <div class="shop-footer">
+          <div class="shop-desc-btn" data-action="desc" title="查看描述">${magGlassSvg}</div>
+          <div class="shop-stock" style="font-size:2.8vw;color:rgba(255,255,255,.5);text-align:right;">${remain === null ? '∞ 无限' : (remain > 0 ? `余 ${remain}` : '<span style="color:#ff4d5a;">已售罄</span>')}</div>
+        </div>
 
       </div>`;
 
@@ -5005,7 +5115,25 @@ async function loadShop() {
 
   c.querySelectorAll('.shop-item').forEach(el => {
 
-    el.onclick = () => buyItem(el.dataset.id);
+    el.onclick = (e) => {
+      const tgt = e.target.closest('[data-action]');
+      if (tgt) {
+        e.stopPropagation();
+        if (tgt.dataset.action === 'fav') {
+          _toggleFavorite(el.dataset.id);
+          loadShop();  // 重新渲染，让收藏道具顶置
+          return;
+        }
+        if (tgt.dataset.action === 'desc') {
+          try {
+            const it = JSON.parse(decodeURIComponent(el.dataset.item));
+            showItemDesc(it);
+          } catch (err) { console.error('showItemDesc parse failed', err); }
+          return;
+        }
+      }
+      buyItem(el.dataset.id);
+    };
 
   });
 
@@ -5244,7 +5372,16 @@ async function dailyCheckin() {
 
   if (res.error) return toast(res.error, 'err');
 
-  toast(`签到成功！获得 ${res.reward} 玄币`);
+  // 后端 reward 是 {gold, treasure_count, health, items} 对象，要按字段拼，不能直接 ${res.reward}
+  const parts = [];
+  if (res.reward.gold) parts.push(`${res.reward.gold} 玄币`);
+  if (res.reward.treasure_count) parts.push(`${res.reward.treasure_count} 张寻宝抽奖券`);
+  if (res.reward.health) parts.push(`${res.reward.health} 健康`);
+  if (res.reward.items && res.reward.items.length) {
+    parts.push(...res.reward.items.map(it => `${it.item_id} ×${it.qty}`));
+  }
+  const desc = parts.length ? parts.join(' + ') : '无奖励';
+  toast(`签到成功！获得 ${desc}`);
 
   curPlayer = res.player;
 
