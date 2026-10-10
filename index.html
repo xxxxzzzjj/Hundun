@@ -249,18 +249,20 @@ html, body {
 
 /* 地图（12×20 网格）*/
 
+/* ★ 地图容器：用 aspect-ratio 锁成和图片完全一致的比例，宽度受 38vh 限制
+     这样 .map-area 的盒子 === 图片盒子 → 雷区/宝箱的百分比定位永远对齐（不会被 max-height 裁偏） */
 .map-area {
-
-  position:relative; margin:2vw 4vw 0; flex-shrink:0;
-
-  max-height:38vh;            /* 关键：限制地图最大高度，给 .info-panel 留足够空间 */
-
-  overflow:hidden;             /* 防止地图内容溢出影响下层 */
-
+  position:relative;
+  margin:2vw auto 0;
+  width:min(92vw, calc(38vh * 1.6344));
+  aspect-ratio:1319 / 807;
+  max-height:38vh;
+  overflow:hidden;
+  flex-shrink:0;
 }
 
 /* ---- 第 1 层：底层动图（撑开容器高度）---- */
-.map-bg { position:relative; z-index:1; width:100%; display:block; border-radius:8px; background:rgba(0,0,0,.25); }
+.map-bg { position:relative; z-index:1; width:100%; height:100%; display:block; object-fit:fill; border-radius:8px; background:rgba(0,0,0,.25); }
 /* ---- 第 2 层：PNG 文字/标注层（绝对定位，和底层逐像素对齐）---- */
 .map-overlay {
   position:absolute; inset:0; z-index:2;
@@ -1732,7 +1734,13 @@ function toast(msg, type='ok', duration = 2000) {
 
   t._timer = setTimeout(() => t.className = 'toast', duration);
 
+  // ★ 成功/失败提示同时写进顶部提示条：让最新发生的事永远顶替显示在最上面，
+  //   玩家不用去展开折叠区翻。（refreshSysbarRows 按时间取最新一条渲染）
+  if (type === 'ok' || type === 'err') {
+    try { sysTip(msg, 'system'); } catch (e) { }
+  }
 }
+
 
 
 
@@ -3364,7 +3372,7 @@ function findCellPlayers(cellKey) {
 
 
 async function onCellClick(cell) {
-if (!requireHealth()) return;   // 地图格子
+// ★ 地图移动不受健康限制（健康 0 也能走，避免被困在雷区）—— 其它入口的限制保持不变
 
   curCell = cell;
 
@@ -4229,19 +4237,23 @@ async function doTravel(place, price) {
   curPlayer = res.player;
 
   if (res.cell) curCell = res.cell;
-  // 到达格子时捡到宝箱的提示（后端 travel 已自动结算）
-  if (res.chest && res.chest.ok) {
-    toast("🎁 捡到【" + (res.chest.type || "宝箱") + "】：" + (res.chest.text || ""), "ok", 3600);
-  } else if (res.chest && res.chest.lost) {
-    toast("🎁 " + (res.chest.reason || "宝箱被别人拿走了"), "err", 2800);
-  }
+    // ★ 提示顺序：先「已抵达」，后「宝箱」—— 保证宝箱是最新一条，能顶替到顶部提示条
+    if (!autoLeaveNoticed) sysTip(`已抵达 ${place.name}`);
 
-  renderPlayer();
+    // 到达格子时捡到宝箱（后端 travel 已自动结算）
+    //   关键：sysTip 才会更新顶部提示条；toast 只是临时气泡。重要的都要调 sysTip。
+    if (res.chest && res.chest.ok) {
+      const _cm = "🎁 在 " + (res.cell || curCell || "") + " 捡到【" + (res.chest.type || "宝箱") + "】：" + (res.chest.text || "");
+      toast(_cm, "ok", 3600);
+      sysTip(_cm, "system");
+    } else if (res.chest && res.chest.lost) {
+      const _cm = "🎁 " + (res.chest.reason || "宝箱被别人拿走了");
+      toast(_cm, "err", 2800);
+      sysTip(_cm, "system");
+    }
 
-  highlightMyPlace();
-
-  if (!autoLeaveNoticed) sysTip(`已抵达 ${place.name}`);
-
+  // ★ 修复：拿完宝箱 / 到达新格子后刷新地图对象，否则宝箱图标不会消失
+  try { await loadMapObjects(); } catch (e) {}
   backToProfile();
 
 }

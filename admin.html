@@ -781,6 +781,22 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <div class="form-row">
         <div><label>是否开启宝箱</label><select id="cfg_chest_enabled"><option value="1">开启</option><option value="0">关闭</option></select></div>
         <div><label>每几小时刷新一次</label><input id="cfg_chest_interval_hours" type="number" min="1" max="720" value="3"></div>
+  <div class="form-row">
+    <div><label>捡到后消失方式</label>
+      <select id="cfg_chest_vanish_mode" onchange="gmkVanishUI()">
+        <option value="instant">捡到后立即消失</option>
+        <option value="delay">捡到后 N 分钟消失</option>
+        <option value="count">被捡 N 次后消失</option>
+      </select>
+    </div>
+    <div id="row_chest_vanish_minutes"><label>捡到后几分钟消失</label><input id="cfg_chest_vanish_minutes" type="number" min="1" max="1440" value="5"></div>
+    <div id="row_chest_vanish_count"><label>被捡几次后消失</label><input id="cfg_chest_vanish_count" type="number" min="1" max="99" value="1"></div>
+  </div>
+  <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;">
+    · <b style="color:#ffd700;">立即消失</b>：第一个到达的玩家拿走，地图上马上消失<br>
+    · <b style="color:#ffd700;">N 分钟消失</b>：被拿走后地图上仍显示（可做变暗），N 分钟后消失，期间别人不能再拿<br>
+    · <b style="color:#ffd700;">N 次消失</b>：可被 N 个不同玩家各拿一次（同一人只能拿一次），拿满 N 次后消失
+  </div>
       </div>
       <div class="form-row">
         <div><label>每次刷新几个</label><input id="cfg_chest_spawn_count" type="number" min="1" max="50" value="3"></div>
@@ -5192,6 +5208,11 @@ async function loadGameConfig() {
   gmkFillCfgForm(c);
   // 地图宝箱（商人）参数回填
   if ($("cfg_chest_enabled")) $("cfg_chest_enabled").value = (c.chest_enabled === false) ? '0' : '1';
+      // ★ 宝箱消失方式（三种模式）
+      if ($("cfg_chest_vanish_mode")) $("cfg_chest_vanish_mode").value = c.chest_vanish_mode || "instant";
+      if ($("cfg_chest_vanish_minutes")) $("cfg_chest_vanish_minutes").value = (c.chest_vanish_minutes != null ? c.chest_vanish_minutes : 5);
+      if ($("cfg_chest_vanish_count")) $("cfg_chest_vanish_count").value = (c.chest_vanish_count != null ? c.chest_vanish_count : 1);
+      if (typeof gmkVanishUI === "function") gmkVanishUI();
   if ($("cfg_chest_interval_hours")) $("cfg_chest_interval_hours").value = c.chest_interval_hours != null ? c.chest_interval_hours : 3;
   if ($("cfg_chest_spawn_count")) $("cfg_chest_spawn_count").value = c.chest_spawn_count != null ? c.chest_spawn_count : 3;
   if ($("cfg_chest_expire_hours")) $("cfg_chest_expire_hours").value = c.chest_expire_hours != null ? c.chest_expire_hours : 12;
@@ -5273,6 +5294,9 @@ async function saveGameConfig() {
     chest_prob_normal: getInt("cfg_chest_prob_normal", 70),
     chest_prob_rare: getInt("cfg_chest_prob_rare", 25),
     chest_prob_epic: getInt("cfg_chest_prob_epic", 5),
+        chest_vanish_mode: ($("cfg_chest_vanish_mode") || {}).value || "instant",
+        chest_vanish_minutes: getInt("cfg_chest_vanish_minutes", 5),
+        chest_vanish_count: getInt("cfg_chest_vanish_count", 1),
     // 五子棋参数
     ...gmkCollectCfg(),
   };
@@ -5368,6 +5392,13 @@ async function showEditChestItem(id) {
   showChestItemForm(it);
 }
 
+
+// ★ 宝库分类联动：选中「宝藏宝箱」才显示品质下拉
+function gmkChestTierUI() {
+  var cat = (document.getElementById("chi_category") || {}).value || "";
+  var w = document.getElementById("wrap_chi_chest_tier");
+  if (w) w.style.display = (cat === "chest") ? "" : "none";
+}
 function showChestItemForm(it) {
   const isEdit = !!it.id;
   const title = isEdit ? '编辑宝箱：' + it.id : '创建宝箱';
@@ -5383,11 +5414,21 @@ function showChestItemForm(it) {
       <div><label>库存（剩余可被抽取次数）</label><input id="chi_stock" type="number" min="0" value="${it.stock||1}"></div></div>
     <div class="form-row"><div>
       <label>宝库分类（关键修复：决定此宝箱可被哪种玩��抽出）</label>
-      <select id="chi_category" style="width:100%;padding:1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
+      <select id="chi_category" onchange="gmkChestTierUI()" style="width:100%;padding:1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
         <option value=""${cat===''?' selected':''}>📦 全部玩法可出（默认）</option>
         <option value="treasure"${cat==='treasure'?' selected':''}>🗺️ 仅寻宝可出</option>
         <option value="farm"${cat==='farm'?' selected':''}>🌾 仅种田可出</option>
+        <option value="chest"${cat==='chest'?' selected':''}>🏴 宝藏宝箱（仅地图宝箱可出）</option>
       </select>
+    <div id="wrap_chi_chest_tier" style="display:none;margin-top:1.2vw;">
+      <label>宝箱品质（玩家开哪种宝箱才能出这个物品）</label>
+      <select id="chi_chest_tier" style="width:100%;padding:1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
+        <option value="normal"${(it.chest_tier||'normal')==='normal'?' selected':''}>🟤 普通宝箱池</option>
+        <option value="rare"${it.chest_tier==='rare'?' selected':''}>🔵 稀有宝箱池</option>
+        <option value="epic"${it.chest_tier==='epic'?' selected':''}>🟡 极品宝箱池</option>
+      </select>
+      <div style="font-size:2.4vw;color:rgba(255,255,255,.45);margin-top:.8vw;line-height:1.6;">地图上刷出🟤普通宝箱 → 只从这个池抽；🔵稀有 → 只抽稀有池；🟡极品 → 只抽极品池。<br>池子空了或库存不足 → 玩家开到「空空如也」（正常）。寻宝/种田永远抽不到这里的物品。</div>
+    </div>
     </div><div></div></div>
     <div class="form-row"><div style="display:flex;align-items:center;gap:2vw;">
       <input type="checkbox" id="chi_only_chest" ${it.only_chest===true?'checked':''} style="width:5vw;height:5vw;max-width:22px;max-height:22px;">
@@ -5414,6 +5455,8 @@ function showChestItemForm(it) {
       stock: parseInt($("chi_stock").value) || 0,
       // 关键修复（宝库分类）：把分类一并保存
       category: ($("chi_category").value || '').trim(),
+      // ★ 宝藏宝箱品质：只有 category==='chest' 才写，其它分类留空
+      chest_tier: (function () { var c = ($("chi_category") || {}).value || ""; if (c !== "chest") return ""; var el = document.getElementById("chi_chest_tier"); return (el && el.value) || "normal"; })(),
       // 只限宝箱获取：勾选后寻宝抽不到，只有地图宝箱能出
       only_chest: !!(document.getElementById("chi_only_chest") && document.getElementById("chi_only_chest").checked),
     };
@@ -5427,7 +5470,7 @@ function showChestItemForm(it) {
     toast(isEdit ? '已更新' : '已创建（未上架）');
     closeModal();
     loadTreasureAdmin();
-  }, '保存');
+  }, '保存', null, false, function () { gmkChestTierUI(); });
 }
 
 async function toggleChestItem(id, enabled) {
@@ -5875,6 +5918,15 @@ async function endGomokuRoom(id) {
 // ============================================================
 // ============ 商人（地图宝箱 + 雷区）后台 ============
 // ============================================================
+
+// ★ 宝箱消失方式：按选择显示对应的输入框
+function gmkVanishUI() {
+  var m = ($("cfg_chest_vanish_mode") || {}).value || "instant";
+  var rMin = $("row_chest_vanish_minutes");
+  var rCnt = $("row_chest_vanish_count");
+  if (rMin) rMin.style.display = (m === "delay") ? "" : "none";
+  if (rCnt) rCnt.style.display = (m === "count") ? "" : "none";
+}
 async function saveMerchantConfig() {
   const getInt = (id, def) => { const v = parseInt($(id).value); return isNaN(v) ? def : v; };
   const fields = {
@@ -5956,6 +6008,66 @@ async function loadZones() {
   html += '</tbody></table>';
   box.innerHTML = html;
 }
+
+// ══════════ 雷区临时加成：多行 UI ══════════
+const ZN_BUFF_ATTRS = [
+  ["gold","玄币"],["health","健康"],["stock","蓝条"],["spirit","精神"],["sense","感知"],
+  ["body","体魄"],["agile","敏捷"],["charm","魅力"],["blood","血脉"],["wisdom","悟性"],
+  ["enlighten","觉悟"],["lv","等级"]
+];
+// ★ 直接生成加成行的 HTML（内联进 body，避免依赖弹窗渲染时机）
+function znBuffRowsHtml(list) {
+  var arr = [];
+  try { arr = JSON.parse(list || "[]"); } catch (e) { arr = []; }
+  if (!Array.isArray(arr)) arr = [];
+  if (!arr.length) arr = [{ attr: "blood", value: 5 }];   // 新建时给一行默认
+  return arr.map(function (x) {
+    return znBuffRowHtml((x && x.attr) || "gold", (x && x.value) != null ? x.value : 1);
+  }).join("");
+}
+function znBuffRowHtml(attr, value) {
+  return '<div class="zn-buff-row" style="display:flex;gap:1.2vw;align-items:center;">'
+    + '<select class="zn-ba" style="flex:1;padding:1.4vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;">' + znAttrOptions(attr) + '</select>'
+    + '<input class="zn-bv" type="number" value="' + value + '" style="width:22vw;padding:1.4vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;">'
+    + '<button type="button" onclick="this.parentElement.remove()" style="padding:1.4vw 2.6vw;border-radius:6px;border:0;background:rgba(230,40,54,.25);color:#ff8a94;font-size:3.2vw;cursor:pointer;">✕</button>'
+    + '</div>';
+}
+function znAttrOptions(sel) {
+  return ZN_BUFF_ATTRS.map(function (x) {
+    return "<option value=\"" + x[0] + "\"" + (sel === x[0] ? " selected" : "") + ">" + x[1] + "</option>";
+  }).join("");
+}
+// 添加一行（attr 可空，value 默认 1）
+function znAddBuffRow(attr, value) {
+  var box = document.getElementById("zn_buff_rows");
+  if (!box) return;
+  var tmp = document.createElement("div");
+  tmp.innerHTML = znBuffRowHtml(attr || "gold", value != null ? value : 1);
+  box.appendChild(tmp.firstChild);
+}
+// 用已有配置渲染
+function znRenderBuffRows(list) {
+  var box = document.getElementById("zn_buff_rows");
+  if (!box) return;
+  box.innerHTML = "";
+  var arr = [];
+  try { arr = JSON.parse(list || "[]"); } catch (e) { arr = []; }
+  if (!Array.isArray(arr)) arr = [];
+  if (!arr.length) { znAddBuffRow("blood", 5); return; }
+  arr.forEach(function (x) { znAddBuffRow(x && x.attr, x && x.value); });
+}
+// 收集成 JSON 数组
+function znCollectBuffs() {
+  var box = document.getElementById("zn_buff_rows");
+  if (!box) return "[]";
+  var out = [];
+  [].forEach.call(box.querySelectorAll(".zn-buff-row"), function (r) {
+    var at = (r.querySelector(".zn-ba") || {}).value || "";
+    var va = parseInt((r.querySelector(".zn-bv") || {}).value) || 0;
+    if (at && va) out.push({ attr: at, value: va });
+  });
+  return JSON.stringify(out);
+}
 function openZoneEdit(id) {
   const z = (id ? _ZONES.find(x => x.id === id) : null) || { corners: ['C3','H3','H8','C8'], interval_min: 1, effect_health: -2, effect_spirit: 0, effect_gold: 0, opacity: 0.45, image: 'imgs/zone/danger.png', allow_enter: true, enabled: true, move_interval_hours: 0, tip: '' };
   const body = ''
@@ -5964,11 +6076,22 @@ function openZoneEdit(id) {
     + '<div class="form-row"><div><label>四个角（左上、右上、右下、左下，逗号分隔）</label><input id="zn_corners" value="' + escapeHtml((z.corners || []).join(',')) + '" placeholder="如 C3,H3,H8,C8"></div></div>'
     + '<div class="form-row"><div><label>贴图路径</label><input id="zn_image" value="' + escapeHtml(z.image || 'imgs/zone/danger.png') + '"></div>'
     + '<div><label>透明度 0~1（越小越淡）</label><input id="zn_opacity" type="number" step="0.05" min="0" max="1" value="' + (z.opacity != null ? z.opacity : 0.45) + '"></div></div>'
-    + '<div class="form-row"><div><label>结算间隔（分钟）</label><input id="zn_interval" type="number" min="1" max="1440" value="' + (z.interval_min || 1) + '"></div>'
+    + '<div class="form-row"><div><label>⭐ 结算间隔 N 分钟（上面"每 N 分钟"就是这个值）</label><input id="zn_interval" type="number" min="1" max="1440" value="' + (z.interval_min || 1) + '"></div>'
     + '<div><label>玩家能否进入</label><select id="zn_allow"><option value="1"' + (z.allow_enter ? ' selected' : '') + '>允许进入</option><option value="0"' + (!z.allow_enter ? ' selected' : '') + '>禁止进入</option></select></div></div>'
-    + '<div class="form-row"><div><label>健康 每周期变化（负数扣血）</label><input id="zn_hp" type="number" value="' + (z.effect_health || 0) + '"></div>'
-    + '<div><label>蓝条 每周期变化</label><input id="zn_sp" type="number" value="' + (z.effect_spirit || 0) + '"></div>'
-    + '<div><label>玄币 每周期变化</label><input id="zn_gd" type="number" value="' + (z.effect_gold || 0) + '"></div></div>'
+    + '<div class="form-row"><div><label>每 N 分钟：健康 变化（负数扣血）</label><input id="zn_hp" type="number" value="' + (z.effect_health || 0) + '"></div>'
+    + '<div><label>每 N 分钟：蓝条 变化</label><input id="zn_sp" type="number" value="' + (z.effect_spirit || 0) + '"></div>'
+    + '<div><label>每 N 分钟：玄币 变化</label><input id="zn_gd" type="number" value="' + (z.effect_gold || 0) + '"></div></div>'
+        + '<div style="background:rgba(46,232,78,.06);border:1px solid rgba(46,232,78,.28);border-radius:10px;padding:2.5vw;margin-bottom:2vw;">'
+    + '<div style="display:flex;align-items:center;gap:2vw;margin-bottom:1.5vw;"><label style="margin:0;font-size:3.3vw;font-weight:bold;color:#8effa8;">✨ 临时属性加成</label><select id="zn_buff_on" style="flex:1;padding:1.4vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;"><option value="0"' + (!z.buff_enabled ? ' selected' : '') + '>关闭</option><option value="1"' + (z.buff_enabled ? ' selected' : '') + '>开启</option></select></div>'
+    + '<div style="display:flex;gap:1.2vw;font-size:2.5vw;color:rgba(255,255,255,.4);padding:0 0 .8vw 0;border-bottom:1px dashed rgba(255,255,255,.12);margin-bottom:1vw;"><span style="flex:1;">属性</span><span style="width:22vw;text-align:center;">数值</span><span style="width:9vw;text-align:center;">删除</span></div>'
+    + '<div id="zn_buff_rows" style="display:flex;flex-direction:column;gap:1.2vw;">' + znBuffRowsHtml(z.buff_list) + '</div>'
+    + '<button type="button" onclick="znAddBuffRow()" style="width:100%;margin-top:1.5vw;padding:1.8vw 0;border-radius:8px;border:1px dashed rgba(46,232,78,.6);background:rgba(46,232,78,.12);color:#8effa8;font-size:3.1vw;cursor:pointer;">➕ 添加一条属性</button>'
+    + '<div style="font-size:2.4vw;color:rgba(255,255,255,.45);margin-top:1.2vw;line-height:1.6;">玩家<b style="color:#2ee84e;">进入</b>区域 → 立刻按上面每条加；<b style="color:#ff7a86;">离开</b> → 立刻全部扣除恢复。反复进出不会叠加。</div>'
+    + '</div>'
+    + '<div class="form-row" style="margin-top:1vw;">'
+    + '<div style="display:flex;align-items:center;gap:1.5vw;"><input type="checkbox" id="zn_stop_hp"' + (z.stop_health_regen ? ' checked' : '') + ' style="width:5vw;height:5vw;max-width:22px;max-height:22px;"><label style="margin:0;">🚫 进入此区域：关闭【健康】自动恢复</label></div>'
+    + '<div style="display:flex;align-items:center;gap:1.5vw;"><input type="checkbox" id="zn_stop_sp"' + (z.stop_spirit_regen ? ' checked' : '') + ' style="width:5vw;height:5vw;max-width:22px;max-height:22px;"><label style="margin:0;">🚫 进入此区域：关闭【蓝条】自动恢复</label></div>'
+    + '</div>'
     + '<div class="form-row"><div><label>每隔几小时自动换个地方（0 = 不移动）</label><input id="zn_move" type="number" min="0" max="720" value="' + (z.move_interval_hours || 0) + '"></div>'
     + '<div><label>提示文字</label><input id="zn_tip" value="' + escapeHtml(z.tip || '') + '"></div></div>'
     + '<div style="font-size:2.6vw;color:rgba(255,255,255,.45);line-height:1.7;">系统取这四个角围成的方框里的<b>最大内接圆</b>作为雷区（边角格不会中招，符合圆形设计）</div>';
@@ -5985,7 +6108,14 @@ function openZoneEdit(id) {
       effect_health: parseInt($("zn_hp").value) || 0,
       effect_spirit: parseInt($("zn_sp").value) || 0,
       effect_gold: parseInt($("zn_gd").value) || 0,
-      move_interval_hours: parseInt($("zn_move").value) || 0,
+      move_interval_hours: parseInt($("zn_move").value) || 0,
+      // ★ 雷区临时属性加成
+      buff_enabled: ($("zn_buff_on") || {}).value === "1" ? 1 : 0,
+            // ★ 多属性加成：从多行 UI 收集
+            buff_list: znCollectBuffs(),
+            // ★ 进入区域是否关闭自动恢复
+            stop_health_regen: (document.getElementById("zn_stop_hp") && document.getElementById("zn_stop_hp").checked) ? 1 : 0,
+            stop_spirit_regen: (document.getElementById("zn_stop_sp") && document.getElementById("zn_stop_sp").checked) ? 1 : 0,
       tip: ($("zn_tip").value || '').trim(),
     };
     const res = await api('/api/admin/zoneSave', { method: 'POST', body: JSON.stringify(payload) });
@@ -5993,7 +6123,10 @@ function openZoneEdit(id) {
     toast('已保存');
     closeModal();
     loadZones();
-  }, '保存');
+  }, '保存');
+  // ★ 必须用 setTimeout 渲染：admin 的 showModal 没有 afterRender 参数
+  //   （第 7 个参数是 hideCancel，之前误传成函数 → 取消按钮被隐藏 + 渲染不执行）
+    // ★ 行已在 body 字符串里内联生成，无需 setTimeout 渲染（那样会因为弹窗还没进 DOM 而失败）
 }
 async function delZone(id) {
   if (!confirm('删除这个雷区？')) return;
