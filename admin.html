@@ -791,6 +791,22 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
     </div>
     <div id="row_chest_vanish_minutes"><label>捡到后几分钟消失</label><input id="cfg_chest_vanish_minutes" type="number" min="1" max="1440" value="5"></div>
     <div id="row_chest_vanish_count"><label>被捡几次后消失</label><input id="cfg_chest_vanish_count" type="number" min="1" max="99" value="1"></div>
+  <div class="form-row">
+    <div><label>💾 自动备份（懒备份）</label>
+      <select id="cfg_backup_auto_enabled">
+        <option value="1">开启（推荐）</option>
+        <option value="0">关闭</option>
+      </select>
+    </div>
+    <div><label>每个玩家几小时自动备份一次</label><input id="cfg_backup_auto_interval_hours" type="number" min="1" max="720" value="24"></div>
+    <div><label>自动备份每人保留几份</label><input id="cfg_backup_auto_keep" type="number" min="1" max="20" value="3"></div>
+  </div>
+  <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;line-height:1.6;">
+    · 玩家<b style="color:#8effa8;">心跳时</b>顺便检查：距上次自动备份超过设定小时数，就静默备份一份（约 0.2 秒/人）<br>
+    · <b style="color:#ffd700;">压力分摊到一整天</b>，不会集中处理全服，不影响流畅度<br>
+    · 备份内容：属性/玄币/健康 + 背包 + 称号 + 副业 + 打工 + 种田 + 技能 + 门派绑定<br>
+    · 手动备份（玩家列表「💾 备份」按钮）<b style="color:#8effa8;">不受份数限制</b>，永久保留
+  </div>
   </div>
   <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;">
     · <b style="color:#ffd700;">立即消失</b>：第一个到达的玩家拿走，地图上马上消失<br>
@@ -1313,6 +1329,8 @@ function renderPlayerList() {
         <div style="text-align:center;"><div style="font-size:2.2vw;color:rgba(255,255,255,.4);">📜 觉悟</div><div style="font-size:2.8vw;color:#2ee84e;font-weight:bold;">${p.enlighten||0}</div></div>
       </div>
       <div class="player-ops">
+      <button class="row-op" style="background:#8b5cf6;color:#fff;" onclick="admBackupPlayer('${safeId}')">💾 备份</button>
+      <button class="row-op" style="background:#0ea5e9;color:#fff;" onclick="admShowBackups('${safeId}')">♻️ 恢复</button>
         <button class="row-op give" onclick="adjustGold('${safeId}', +100)">+100玄币</button>
         <button class="row-op take" onclick="adjustGold('${safeId}', -100)">-100玄币</button>
         <button class="row-op give" onclick="adjustGoldPrompt('${safeId}')">💰改玄币</button>
@@ -5212,6 +5230,10 @@ async function loadGameConfig() {
       if ($("cfg_chest_vanish_mode")) $("cfg_chest_vanish_mode").value = c.chest_vanish_mode || "instant";
       if ($("cfg_chest_vanish_minutes")) $("cfg_chest_vanish_minutes").value = (c.chest_vanish_minutes != null ? c.chest_vanish_minutes : 5);
       if ($("cfg_chest_vanish_count")) $("cfg_chest_vanish_count").value = (c.chest_vanish_count != null ? c.chest_vanish_count : 1);
+      // ★ 懒备份配置
+      if ($("cfg_backup_auto_enabled")) $("cfg_backup_auto_enabled").value = (c.backup_auto_enabled === false) ? "0" : "1";
+      if ($("cfg_backup_auto_interval_hours")) $("cfg_backup_auto_interval_hours").value = (c.backup_auto_interval_hours != null ? c.backup_auto_interval_hours : 24);
+      if ($("cfg_backup_auto_keep")) $("cfg_backup_auto_keep").value = (c.backup_auto_keep != null ? c.backup_auto_keep : 3);
       if (typeof gmkVanishUI === "function") gmkVanishUI();
   if ($("cfg_chest_interval_hours")) $("cfg_chest_interval_hours").value = c.chest_interval_hours != null ? c.chest_interval_hours : 3;
   if ($("cfg_chest_spawn_count")) $("cfg_chest_spawn_count").value = c.chest_spawn_count != null ? c.chest_spawn_count : 3;
@@ -5297,6 +5319,9 @@ async function saveGameConfig() {
         chest_vanish_mode: ($("cfg_chest_vanish_mode") || {}).value || "instant",
         chest_vanish_minutes: getInt("cfg_chest_vanish_minutes", 5),
         chest_vanish_count: getInt("cfg_chest_vanish_count", 1),
+        backup_auto_enabled: ($("cfg_backup_auto_enabled") || {}).value === "1",
+        backup_auto_interval_hours: getInt("cfg_backup_auto_interval_hours", 24),
+        backup_auto_keep: getInt("cfg_backup_auto_keep", 3),
     // 五子棋参数
     ...gmkCollectCfg(),
   };
@@ -5420,7 +5445,7 @@ function showChestItemForm(it) {
         <option value="farm"${cat==='farm'?' selected':''}>🌾 仅种田可出</option>
         <option value="chest"${cat==='chest'?' selected':''}>🏴 宝藏宝箱（仅地图宝箱可出）</option>
       </select>
-    <div id="wrap_chi_chest_tier" style="display:none;margin-top:1.2vw;">
+    <div id="wrap_chi_chest_tier" style="' + (cat === 'chest' ? '' : 'display:none;') + 'margin-top:1.2vw;">
       <label>宝箱品质（玩家开哪种宝箱才能出这个物品）</label>
       <select id="chi_chest_tier" style="width:100%;padding:1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
         <option value="normal"${(it.chest_tier||'normal')==='normal'?' selected':''}>🟤 普通宝箱池</option>
@@ -5430,11 +5455,7 @@ function showChestItemForm(it) {
       <div style="font-size:2.4vw;color:rgba(255,255,255,.45);margin-top:.8vw;line-height:1.6;">地图上刷出🟤普通宝箱 → 只从这个池抽；🔵稀有 → 只抽稀有池；🟡极品 → 只抽极品池。<br>池子空了或库存不足 → 玩家开到「空空如也」（正常）。寻宝/种田永远抽不到这里的物品。</div>
     </div>
     </div><div></div></div>
-    <div class="form-row"><div style="display:flex;align-items:center;gap:2vw;">
-      <input type="checkbox" id="chi_only_chest" ${it.only_chest===true?'checked':''} style="width:5vw;height:5vw;max-width:22px;max-height:22px;">
-      <label style="margin:0;">📦 只限宝箱获取（勾选后：寻宝抽不到它，只有地图宝箱能出）</label>
-    </div><div></div></div>
-    <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">
+        <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">
       💡 <b>总概率</b>：此宝箱从所有宝箱中被选中的权重（如 4 个宝箱你给 A 设 10%，剩下 3 个会各自补 30%）<br>
       💡 <b>自身概率</b>：选中后打开是否真给物品（100=必给，0=必空，30=看30 概率给）<br>
       💡 <b>宝库分类</b>：选「仅寻宝」= 此宝箱只能在寻宝里抽出（玩家在种田里不会抽到）；选「仅种田」= 只在种田里抽到
@@ -5458,7 +5479,8 @@ function showChestItemForm(it) {
       // ★ 宝藏宝箱品质：只有 category==='chest' 才写，其它分类留空
       chest_tier: (function () { var c = ($("chi_category") || {}).value || ""; if (c !== "chest") return ""; var el = document.getElementById("chi_chest_tier"); return (el && el.value) || "normal"; })(),
       // 只限宝箱获取：勾选后寻宝抽不到，只有地图宝箱能出
-      only_chest: !!(document.getElementById("chi_only_chest") && document.getElementById("chi_only_chest").checked),
+      // ★ only_chest 跟随分类自动推导（UI 里的勾选框已删除，因为「宝藏宝箱」分类本身就是这个语义）
+      only_chest: (($("chi_category") || {}).value || "") === "chest",
     };
     let res;
     if (isEdit) {
@@ -5470,7 +5492,7 @@ function showChestItemForm(it) {
     toast(isEdit ? '已更新' : '已创建（未上架）');
     closeModal();
     loadTreasureAdmin();
-  }, '保存', null, false, function () { gmkChestTierUI(); });
+  }, '保存');
 }
 
 async function toggleChestItem(id, enabled) {
@@ -5926,6 +5948,52 @@ function gmkVanishUI() {
   var rCnt = $("row_chest_vanish_count");
   if (rMin) rMin.style.display = (m === "delay") ? "" : "none";
   if (rCnt) rCnt.style.display = (m === "count") ? "" : "none";
+}
+
+// ══════════ 玩家账号备份 / 恢复 ══════════
+// ★ 后端每次「修改玩家」前也会自动备份一份（reason=auto_before_update）
+async function admBackupPlayer(id) {
+  id = String(id || "").trim();
+  if (!id) return toast("缺少玩家 ID", "err");
+  const r = await api("/api/admin/backupPlayer", { method: "POST", body: JSON.stringify({ id: id, reason: "manual" }) });
+  if (r.error) return toast(r.error, "err");
+  toast("✅ 已备份", "ok", 1800);
+}
+async function admShowBackups(id) {
+  id = String(id || "").trim();
+  if (!id) return toast("缺少玩家 ID", "err");
+  const r = await api("/api/admin/backupList?id=" + encodeURIComponent(id));
+  if (r.error) return toast(r.error, "err");
+  const list = r.backups || [];
+  if (!list.length) { showModal("♻️ 备份记录", '<div class="empty">还没有备份<br><span style="font-size:2.8vw;color:rgba(255,255,255,.35);">点「💾 备份」立刻存一份</span></div>', null, "关闭", null, true); return; }
+  const tag = { manual: "手动", auto_before_update: "改前自动", before_restore: "恢复前" };
+  let html = '<div style="font-size:2.8vw;color:rgba(255,255,255,.5);margin-bottom:2vw;">共 ' + list.length + ' 份　含：属性/玄币/健康 + 背包/称号/副业/种田（每人最多 20 份）</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:1.6vw;max-height:52vh;overflow-y:auto;">';
+  list.forEach(function (b) {
+    const t = new Date((b.created_at || 0) * 1000);
+    const ts = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0") + " " + String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
+    html += '<div style="display:flex;align-items:center;gap:2vw;padding:2vw 2.4vw;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);">'
+      + '<div style="flex:1;min-width:0;"><div style="font-size:3vw;color:#fff;font-weight:bold;">' + ts + '</div>'
+      + '<div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin-top:.6vw;">' + (tag[b.reason] || b.reason || "") + '　等级 ' + (b.lv || 0) + '　玄币 ' + (b.gold || 0) + '　<span style="color:#8effa8;">含 ' + (b.parts || 1) + ' 项数据</span></div></div>'
+      + '<button class="mini-op green" onclick="admRestoreBackup(\'' + b.id + '\')">恢复</button>'
+      + '<button class="mini-op red" onclick="admDeleteBackup(\'' + b.id + '\')">删</button>'
+      + '</div>';
+  });
+  html += '</div>';
+  showModal("♻️ 备份记录 · " + id, html, null, "关闭", null, true);
+}
+async function admRestoreBackup(backupId) {
+  if (!confirm("确认恢复到这份备份？\n\n当前状态会先自动备份一份，所以恢复错了还能再退回来。")) return;
+  const r = await api("/api/admin/restorePlayer", { method: "POST", body: JSON.stringify({ backupId: backupId }) });
+  if (r.error) return toast(r.error, "err");
+  toast("✅ 已恢复，请刷新列表", "ok", 2200);
+  setTimeout(function () { closeModal(); if (typeof refreshAll === "function") refreshAll(); }, 400);
+}
+async function admDeleteBackup(backupId) {
+  const r = await api("/api/admin/backupDelete", { method: "POST", body: JSON.stringify({ backupId: backupId }) });
+  if (r.error) return toast(r.error, "err");
+  toast("已删除");
+  setTimeout(function () { admShowBackups(id); }, 300);
 }
 async function saveMerchantConfig() {
   const getInt = (id, def) => { const v = parseInt($(id).value); return isNaN(v) ? def : v; };
