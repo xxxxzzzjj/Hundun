@@ -4146,7 +4146,9 @@ function enterHall() {
 
   window._syncTimers.friendBadge = setInterval(pullFriendRequestBadge, 5000);
 
-  // 私聊轮询（5 秒，只在打开私聊窗口时跑）
+  // 私聊轮询：启动（内部会先清旧的再建，登出再登录也能恢复正常）
+  //   pollOpenChats 内部会判断"有没有打开的聊天窗口"，没有就一个请求都不发
+  if (typeof startChatPolling === 'function') startChatPolling();
 
   window.addEventListener('beforeunload', () => {
 
@@ -5190,7 +5192,11 @@ async function onPinClick(place, cellKey) {
     let html = '<div style="font-size:3.2vw;color:rgba(255,255,255,.6);margin-bottom:2.5vw;">此格共有 ' + others.length + ' 名玩家</div>';
     html += '<div style="display:flex;flex-direction:column;gap:2vw;">';
     others.forEach((pp, i) => {
-      html += '<button class="action-btn" onclick="closeModal();showMapPlayerModal(\'' + escapeHtml(pp.uid) + '\', place)"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">' + escapeHtml(pp.name || ("玩家" + (i + 1))) + "</span></button>";
+      // 关键修复：原来这里把局部变量 place 直接拼进内联 onclick（onclick="...showMapPlayerModal('uid', place)"），
+      //   但内联属性里的代码跑在全局作用域，看不到函数里的 place → 点一下必报 ReferenceError: place is not defined。
+      //   改为把地名转成字符串字面量传进去（showMapPlayerModal 只用到 placeHint.name）。
+      const placeArg = JSON.stringify({ name: place.name || '' }).replace(/"/g, '&quot;');
+      html += '<button class="action-btn" onclick="closeModal();showMapPlayerModal(\'' + escapeHtml(pp.uid) + '\',' + placeArg + ')"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">' + escapeHtml(pp.name || ("玩家" + (i + 1))) + "</span></button>";
     });
     html += "</div>";
     return showModal("此格的玩家", html, null, "关闭", null, true);
@@ -5247,10 +5253,14 @@ function buildPlayerCard(p, uid, opts) {
   h += "</div>";
   // ★ 属性区（opts.hideStats = true 时跳过，避免和好友弹窗下面的 8 属性重复）
   if (!opts.hideStats) {
-  // 属性区
-  const attrs = [["🧠 精神", p.spirit], ["👁 感知", p.sense], ["💪 体魄", p.body], ["🏃 敏捷", p.agile], ["🌸 魅力", p.charm], ["🩸 血脉", p.blood]];
+  // ★ 8 个属性（补齐 悟性 / 觉悟 —— 后端 playerInfo 早已返回 wisdom / enlighten，
+  //   之前这里只列了 6 个，导致地图点玩家看到的属性和自己面板不一致）
+  const attrs = [
+    ["🧠 精神", p.spirit], ["👁️ 感知", p.sense], ["💪 体魄", p.body], ["🏃 敏捷", p.agile],
+    ["🌸 魅力", p.charm], ["🩸 血脉", p.blood], ["📖 悟性", p.wisdom], ["📜 觉悟", p.enlighten]
+  ];
   h += '<div style="margin-top:2.6vw;"><div style="font-size:2.6vw;color:#ffd700;font-weight:bold;margin-bottom:1.4vw;">📊 属性</div>';
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2vw;">';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1.2vw;">';
   attrs.forEach(a => {
     h += '<div style="text-align:center;padding:1.4vw .6vw;border-radius:8px;background:rgba(0,0,0,.3);border:1px solid rgba(255,215,0,.12);">'
       + '<div style="font-size:2.1vw;color:rgba(255,255,255,.45);">' + a[0] + "</div>"
@@ -6643,7 +6653,7 @@ async function openCommentsModal(postId) {
   //   弹窗开着，内容会写到错误的对象上，关掉后只剩"加载中"）
   let cmts = [];
   try { const cr = await api('/api/postComments?post_id=' + encodeURIComponent(postId)); cmts = (cr.ok && cr.comments) ? cr.comments : []; } catch (e) { }
-  const _cmtHtml = buildCommentsHtml(cmts, postAuthorUid);
+  const _cmtHtml = buildCommentsHtml(cmts, postAuthorUid, postId);
   showModal('💬 评论 · ' + title, '<div id="cmtList_' + postId + '">' + _cmtHtml + '</div>' + `  <div style="margin-top:2vw;padding-top:2vw;border-top:1px solid rgba(255,255,255,.1);display:flex;gap:1.5vw;">
       <input id="cmtInput_${postId}" maxlength="200" style="flex:1;padding:2vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;font-size:3vw;outline:none;" placeholder="说点什么…（最多 200 字）">
       <button onclick="submitComment('${escapeHtml(postId)}')" style="padding:2vw 4vw;background:linear-gradient(180deg,#4d8cff,#2563eb);color:#fff;border:none;border-radius:6px;font-weight:bold;font-size:3vw;cursor:pointer;">发送</button>
@@ -6651,7 +6661,7 @@ async function openCommentsModal(postId) {
     <div style="font-size:2.4vw;color:rgba(255,255,255,.4);margin-top:1vw;text-align:center;">💡 自己的评论可点击删除；帖主可删除自己帖子下的所有评论</div>`, null, '关闭', null, true);
 }
 
-function buildCommentsHtml(cmts, postAuthorUid) {
+function buildCommentsHtml(cmts, postAuthorUid, postId) {
   cmts = cmts || [];
 
 
@@ -6683,7 +6693,7 @@ async function loadCommentsInto(postId, postAuthorUid) {
   const list = $('cmtList_' + postId);
   if (!list) return;
   const res = await api('/api/postComments?post_id=' + encodeURIComponent(postId));
-  list.innerHTML = buildCommentsHtml((res.ok && res.comments) ? res.comments : [], postAuthorUid);
+  list.innerHTML = buildCommentsHtml((res.ok && res.comments) ? res.comments : [], postAuthorUid, postId);
 }
 
 async function submitComment(postId) {
@@ -9588,22 +9598,40 @@ async function loadChatHistory(friendId) {
 
 
 
-// 全局每 5 秒轮询所有打开的聊天窗口
-
+// 私聊轮询：只在"真的有打开的聊天窗口"时才发请求
+// 关键修复（省流量/省钱）：之前是常驻 setInterval 每秒跑一次，共 3600 次/小时，
+//   即使一个聊天窗口都没开也照跑 → 空闲挂机也白烧后端额度。
+//   现在改为：没有打开的聊天窗口就立刻 return，一个请求都不发；
+//   并且间隔从 1 秒放宽到 3 秒（聊天场景 3 秒完全够）。
 async function pollOpenChats() {
+  // 未登录不发请求
+  if (!curId) return;
 
-  for (const fid of Object.keys(window._chatWindows || {})) {
+  // 没有任何打开的聊天窗口 → 直接跳过，不发任何请求
+  const wins = window._chatWindows || {};
+  const openIds = Object.keys(wins).filter(function (fid) {
+    const w = wins[fid];
+    // 兼容两种存法：存 DOM 节点 / 存标志位
+    if (!w) return false;
+    if (w.nodeType === 1) return document.body.contains(w);   // DOM 节点且仍在页面上
+    return true;
+  });
+  if (!openIds.length) return;
 
-    if (!window._chatWindows[fid]) continue;
-
+  for (const fid of openIds) {
     await loadChatHistory(fid);
-
   }
-
 }
 
-// 关键修复：把 setInterval 句柄存到全局，logout 时能清理（之前模块顶层 setInterval 永不停止，登出后每 1 秒用 null curId 调 API）
-window._chatPollInterval = setInterval(pollOpenChats, 1000);
+// 启动私聊轮询（可重复调用，先清旧的再建，避免登出再登录后轮询永久失效）
+function startChatPolling() {
+  if (window._chatPollInterval) {
+    clearInterval(window._chatPollInterval);
+    window._chatPollInterval = null;
+  }
+  window._chatPollInterval = setInterval(pollOpenChats, 3000);
+}
+window.startChatPolling = startChatPolling;
 
 
 
