@@ -1244,7 +1244,7 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 .gmk-item .gmk-nm { flex:1 1 auto; min-width:0; font-size:3.2vw; color:#4d3b28; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .gmk-item .gmk-op { flex:0 0 auto; font-size:2.9vw; padding:1.4vw 3vw; border-radius:2vw; border:0; background:#8fbf8a; color:#20361f; font-weight:bold; }
 .gmk-item .gmk-op.watch { background:#9fc4e8; color:#1d2f42; }
-.gmk-item .gmk-sub { font-size:2.6vw; color:#9a8straight0; }
+.gmk-item .gmk-sub { font-size:2.6vw; color:#9a8567; }
 .gmk-empty { font-size:3vw; color:#a99a86; text-align:center; padding:8vw 0; }
 .gmk-betbox { background:#fff; border:.4vw solid #e8dcc6; border-radius:2.5vw; padding:3vw; margin-bottom:2.5vw; }
 .gmk-betbox h4 { margin:0 0 2vw; font-size:3.2vw; color:#5c4632; }
@@ -7008,10 +7008,14 @@ function renderManageMyPostsModal(myPosts) {
 function buildManageMyPostsHtml(myPosts) {
   myPosts = myPosts || [];
   if (!myPosts.length) return '<div class="empty">你还没发过帖</div>';
+  // 在架 / 已下架 统计（原先直接引用未声明的 live / closed → ReferenceError，面板整块打不开）
+  const live = myPosts.filter(p => p.status !== 'closed').length;
+  const closed = myPosts.length - live;
   let html = `<div style="font-size:3vw;color:rgba(255,255,255,.6);margin-bottom:2vw;">共 ${myPosts.length} 条（<span style="color:#2ee84e;">在架 ${live}</span> / <span style="color:#ff4d5a;">已下架 ${closed}</span>）</div>`;
 
   html += '<div style="display:flex;flex-direction:column;gap:2vw;max-height:65vh;overflow-y:auto;">';
 
+  const areaMap = { chat: '💬 闲聊区', special: '✨ 特殊区', general: '📋 常规区', bounty: '🎯 悬赏区', pinned: '📌 置顶区' };
   myPosts.forEach(p => {
 
     const isClosed = p.status === 'closed';
@@ -7030,7 +7034,7 @@ function buildManageMyPostsHtml(myPosts) {
 
       <div style="font-size:2.8vw;color:rgba(255,255,255,.55);margin-bottom:1.5vw;">
 
-        ${areaName(p.area)} · ${fmtTime(p.created_at)}
+        ${areaMap[p.area] || ''} · ${fmtTime(p.created_at)}
 
       </div>
 
@@ -11797,17 +11801,26 @@ loadGameConfig();
   window.gmkCloseModal = gmkCloseModal;
 
   // ---------- 自检：任何未捕获错误都变成可见提示 ----------
+  // 关键修复：这里是**全页面**的错误监听，不是五子棋专属。
+  //   以前不管哪里出错都写成"五子棋脚本错误"，导致点"管理我的帖子"报错也显示五子棋异常，误导排查。
+  //   现在按当前是否在五子棋界面里决定前缀。
   G.diag = { lastError: '', lastApi: '', lastTap: '' };
+  function gmkErrPrefix() {
+    try { return anyLayerOpen() ? '五子棋脚本错误：' : '页面脚本错误：'; }
+    catch (x) { return '页面脚本错误：'; }
+  }
   window.addEventListener('error', function (e) {
     var m = (e && e.message) || '未知错误';
     G.diag.lastError = m + ' @' + ((e && e.filename) || '') + ':' + ((e && e.lineno) || '');
-    try { gmkFail('五子棋脚本错误：' + m); } catch (x) { }
+    try {
+      gmkFail(gmkErrPrefix() + m + '（' + String((e && e.filename) || '').split('/').pop() + ':' + ((e && e.lineno) || '?') + '）');
+    } catch (x) { }
   });
   window.addEventListener('unhandledrejection', function (e) {
     var r = e && e.reason;
     var m = (r && r.message) || String(r || '未知');
     G.diag.lastError = 'Promise: ' + m;
-    try { gmkFail('五子棋异步错误：' + m); } catch (x) { }
+    try { gmkFail(gmkErrPrefix() + m); } catch (x) { }
   });
 
   function gmkPollOnce() {

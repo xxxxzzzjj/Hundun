@@ -4574,7 +4574,7 @@ async function adminSubmitComment(postId) {
   if (!input) return;
   const text = (input.value || '').trim();
   if (!text) return toast('评论不能为空', 'err');
-  const res = await api('/api/postComment', { uid: '__admin__', post_id: postId, content: text });
+  const res = await api('/api/postComment', { method: 'POST', body: JSON.stringify({ uid: '__admin__', post_id: postId, content: text }) });
   if (res.error) return toast(res.error, 'err');
   input.value = '';
   await adminLoadCommentsInto(postId);
@@ -5818,7 +5818,7 @@ function openGomokuCardEdit(id) {
     + '<div class="form-row"><div><label>卡牌名称（= 图片文件名）</label><input id="gmkCardName" type="text" maxlength="20" placeholder="例如：筑墙" value="' + gmkEsc(c.name) + '"></div>'
     + '<div><label>图标路径（留空 = imgs/gomoku/cards/名称.png）</label><input id="gmkCardIcon" type="text" placeholder="留空自动取图" value="' + gmkEsc(c.icon || '') + '"></div></div>'
     + '<div class="form-row"><div><label>效果类型</label><select id="gmkCardEffect" onchange="gmkApplyParamState()">' + opts + '</select></div>'
-    + '<div><label>稀有度（只影响边框颜色）</label><select id="gmkCardRarity">' + rar + '</select></div></div>'
+    + '<div><label>稀有度（只影响边框颜色）</label><select id="gmkCardRarity">' + rar + '</select></div></div>'
     + '<div style="grid-column:1/-1;padding:1.5vw;border-radius:9px;background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.3);">'
     + '<div style="font-size:2.7vw;color:#ffd700;font-weight:bold;margin-bottom:.8vw;">➕ 附加效果（可多选）—— 让这张卡同时拥有多个效果</div>'
     + '<div style="font-size:2.4vw;color:rgba(255,255,255,.45);margin-bottom:1.2vw;line-height:1.6;">勾选的附加效果会在【主效果】之后<b>依次执行</b>；下面参数区里对应的参数会自动变绿。</div>'
@@ -5865,7 +5865,7 @@ async function saveGomokuCardForm() {
     name: gs('gmkCardName'),
     icon: gs('gmkCardIcon'),
     desc: gs('gmkCardDesc'),
-    effect_type: gs('gmkCardEffect'),
+    effect_type: gs('gmkCardEffect'),
     extra_effects: (function () { var out = []; var bx = document.querySelectorAll('.gmkExtra'); var main = gs('gmkCardEffect'); for (var i = 0; i < bx.length; i++) { if (bx[i].checked && bx[i].value !== main) out.push(bx[i].value); } return out; })(),
     rarity: gs('gmkCardRarity'),
     weight: gi('gmkCardWeight', 100),
@@ -5936,10 +5936,10 @@ async function endGomokuRoom(id) {
   loadGomokuRooms();
 }
 
-
-// ============================================================
-// ============ 商人（地图宝箱 + 雷区）后台 ============
-// ============================================================
+
+// ============================================================
+// ============ 商人（地图宝箱 + 雷区）后台 ============
+// ============================================================
 
 // ★ 宝箱消失方式：按选择显示对应的输入框
 function gmkVanishUI() {
@@ -5993,89 +5993,96 @@ async function admDeleteBackup(backupId) {
   const r = await api("/api/admin/backupDelete", { method: "POST", body: JSON.stringify({ backupId: backupId }) });
   if (r.error) return toast(r.error, "err");
   toast("已删除");
-  setTimeout(function () { admShowBackups(id); }, 300);
+  setTimeout(function () { admShowBackups(backupId); }, 300);
 }
-async function saveMerchantConfig() {
-  const getInt = (id, def) => { const v = parseInt($(id).value); return isNaN(v) ? def : v; };
-  const fields = {
-    chest_enabled: $("cfg_chest_enabled").value === '1',
-    chest_interval_hours: getInt("cfg_chest_interval_hours", 3),
-    chest_spawn_count: getInt("cfg_chest_spawn_count", 3),
-    chest_expire_hours: getInt("cfg_chest_expire_hours", 12),
-    chest_prob_normal: getInt("cfg_chest_prob_normal", 70),
-    chest_prob_rare: getInt("cfg_chest_prob_rare", 25),
-    chest_prob_epic: getInt("cfg_chest_prob_epic", 5),
-  };
-  const res = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields }) });
-  if (res.error) return toast('保存失败：' + res.error, 'err');
-  toast('已保存宝箱参数');
-}
-
-async function loadMerchantChests() {
-  const box = $("chestList");
-  if (!box) return;
-  const res = await api('/api/admin/chestList');
-  if (res.error) { box.innerHTML = '<div class="empty">加载失败：' + escapeHtml(res.error) + '</div>'; return; }
-  const list = res.chests || [];
-  if (!list.length) { box.innerHTML = '<div class="empty">地图上暂时没有宝箱（等心跳触发刷新，或把刷新间隔改小）</div>'; return; }
-  let html = '<table class="tbl"><thead><tr><th>格子</th><th>地区</th><th>类型</th><th>状态</th><th>奖励</th><th>操作</th></tr></thead><tbody>';
-  for (const c of list) {
-    const st = c.taken_by ? '已被领取' : (c.expired ? '已过期' : '待领取');
-    html += '<tr>'
-      + '<td><span class="id-tag">' + escapeHtml(c.cell) + '</span></td>'
-      + '<td>' + escapeHtml(c.place_name || '-') + '</td>'
-      + '<td>' + escapeHtml(c.type_name) + '</td>'
-      + '<td>' + st + '</td>'
-      + '<td style="font-size:2.6vw;">' + escapeHtml((c.reward_text || '').slice(0, 30)) + '</td>'
-      + '<td class="op-cell"><button class="row-op del" onclick="delMerchantChest(\'' + escapeHtml(c.id) + '\')">删除</button></td>'
-      + '</tr>';
-  }
-  html += '</tbody></table>';
-  box.innerHTML = html;
-}
-async function delMerchantChest(id) {
-  if (!confirm('删除这个宝箱？')) return;
-  const res = await api('/api/admin/chestDelete', { method: 'POST', body: JSON.stringify({ id }) });
-  if (res.error) return toast(res.error, 'err');
-  toast('已删除'); loadMerchantChests();
-}
-async function clearMerchantChests() {
-  if (!confirm('清空所有【未被领取】的宝箱？下次心跳会重新刷。')) return;
-  const res = await api('/api/admin/chestClear', { method: 'POST', body: JSON.stringify({}) });
-  if (res.error) return toast(res.error, 'err');
-  toast('已清空'); loadMerchantChests();
-}
-
-let _ZONES = [];
-async function loadZones() {
-  const box = $("zoneList");
-  if (!box) return;
-  const res = await api('/api/admin/zoneList');
-  if (res.error) { box.innerHTML = '<div class="empty">加载失败：' + escapeHtml(res.error) + '</div>'; return; }
-  _ZONES = res.zones || [];
-  if (!_ZONES.length) { box.innerHTML = '<div class="empty">还没有雷区，点右上角「＋ 新建雷区」</div>'; return; }
-  let html = '<table class="tbl"><thead><tr><th>名称</th><th>四角</th><th>圆心/半径</th><th>效果</th><th>准入</th><th>状态</th><th>操作</th></tr></thead><tbody>';
-  for (const z of _ZONES) {
-    const eff = [];
-    if (z.effect_health) eff.push('健康' + (z.effect_health > 0 ? '+' : '') + z.effect_health);
-    if (z.effect_spirit) eff.push('蓝条' + (z.effect_spirit > 0 ? '+' : '') + z.effect_spirit);
-    if (z.effect_gold) eff.push('玄币' + (z.effect_gold > 0 ? '+' : '') + z.effect_gold);
-    html += '<tr>'
-      + '<td>' + escapeHtml(z.name) + '</td>'
-      + '<td style="font-size:2.5vw;">' + escapeHtml((z.corners || []).join(',')) + '</td>'
-      + '<td style="font-size:2.5vw;">' + (z.cx != null ? (z.cx + ',' + z.cy + ' r=' + z.r) : '-') + '</td>'
-      + '<td style="font-size:2.5vw;">每 ' + z.interval_min + ' 分 ' + (eff.join(' ') || '无') + '</td>'
-      + '<td>' + (z.allow_enter ? '允许' : '禁止') + '</td>'
-      + '<td>' + (z.enabled ? '开' : '关') + '</td>'
-      + '<td class="op-cell"><div style="display:flex;gap:.8vw;flex-wrap:wrap;">'
-      + '<button class="row-op edit" onclick="openZoneEdit(\'' + escapeHtml(z.id) + '\')">编辑</button>'
-      + '<button class="row-op code" onclick="moveZoneNow(\'' + escapeHtml(z.id) + '\')">移动</button>'
-      + '<button class="row-op del" onclick="delZone(\'' + escapeHtml(z.id) + '\')">删除</button>'
-      + '</div></td></tr>';
-  }
-  html += '</tbody></table>';
-  box.innerHTML = html;
-}
+async function saveMerchantConfig() {
+  const getInt = (id, def) => { const v = parseInt($(id).value); return isNaN(v) ? def : v; };
+  const fields = {
+    chest_enabled: $("cfg_chest_enabled").value === '1',
+    chest_interval_hours: getInt("cfg_chest_interval_hours", 3),
+    chest_spawn_count: getInt("cfg_chest_spawn_count", 3),
+    chest_expire_hours: getInt("cfg_chest_expire_hours", 12),
+    chest_prob_normal: getInt("cfg_chest_prob_normal", 70),
+    chest_prob_rare: getInt("cfg_chest_prob_rare", 25),
+    chest_prob_epic: getInt("cfg_chest_prob_epic", 5),
+    // 关键修复：这 6 个字段的输入框就在同一张卡片里，但原先漏提交 → 点保存不落库
+    chest_vanish_mode: ($("cfg_chest_vanish_mode") || {}).value || "instant",
+    chest_vanish_minutes: getInt("cfg_chest_vanish_minutes", 5),
+    chest_vanish_count: getInt("cfg_chest_vanish_count", 1),
+    backup_auto_enabled: ($("cfg_backup_auto_enabled") || {}).value === "1",
+    backup_auto_interval_hours: getInt("cfg_backup_auto_interval_hours", 24),
+    backup_auto_keep: getInt("cfg_backup_auto_keep", 3),
+  };
+  const res = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields }) });
+  if (res.error) return toast('保存失败：' + res.error, 'err');
+  toast('已保存宝箱参数');
+}
+
+async function loadMerchantChests() {
+  const box = $("chestList");
+  if (!box) return;
+  const res = await api('/api/admin/chestList');
+  if (res.error) { box.innerHTML = '<div class="empty">加载失败：' + escapeHtml(res.error) + '</div>'; return; }
+  const list = res.chests || [];
+  if (!list.length) { box.innerHTML = '<div class="empty">地图上暂时没有宝箱（等心跳触发刷新，或把刷新间隔改小）</div>'; return; }
+  let html = '<table class="tbl"><thead><tr><th>格子</th><th>地区</th><th>类型</th><th>状态</th><th>奖励</th><th>操作</th></tr></thead><tbody>';
+  for (const c of list) {
+    const st = c.taken_by ? '已被领取' : (c.expired ? '已过期' : '待领取');
+    html += '<tr>'
+      + '<td><span class="id-tag">' + escapeHtml(c.cell) + '</span></td>'
+      + '<td>' + escapeHtml(c.place_name || '-') + '</td>'
+      + '<td>' + escapeHtml(c.type_name) + '</td>'
+      + '<td>' + st + '</td>'
+      + '<td style="font-size:2.6vw;">' + escapeHtml((c.reward_text || '').slice(0, 30)) + '</td>'
+      + '<td class="op-cell"><button class="row-op del" onclick="delMerchantChest(\'' + escapeHtml(c.id) + '\')">删除</button></td>'
+      + '</tr>';
+  }
+  html += '</tbody></table>';
+  box.innerHTML = html;
+}
+async function delMerchantChest(id) {
+  if (!confirm('删除这个宝箱？')) return;
+  const res = await api('/api/admin/chestDelete', { method: 'POST', body: JSON.stringify({ id }) });
+  if (res.error) return toast(res.error, 'err');
+  toast('已删除'); loadMerchantChests();
+}
+async function clearMerchantChests() {
+  if (!confirm('清空所有【未被领取】的宝箱？下次心跳会重新刷。')) return;
+  const res = await api('/api/admin/chestClear', { method: 'POST', body: JSON.stringify({}) });
+  if (res.error) return toast(res.error, 'err');
+  toast('已清空'); loadMerchantChests();
+}
+
+let _ZONES = [];
+async function loadZones() {
+  const box = $("zoneList");
+  if (!box) return;
+  const res = await api('/api/admin/zoneList');
+  if (res.error) { box.innerHTML = '<div class="empty">加载失败：' + escapeHtml(res.error) + '</div>'; return; }
+  _ZONES = res.zones || [];
+  if (!_ZONES.length) { box.innerHTML = '<div class="empty">还没有雷区，点右上角「＋ 新建雷区」</div>'; return; }
+  let html = '<table class="tbl"><thead><tr><th>名称</th><th>四角</th><th>圆心/半径</th><th>效果</th><th>准入</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  for (const z of _ZONES) {
+    const eff = [];
+    if (z.effect_health) eff.push('健康' + (z.effect_health > 0 ? '+' : '') + z.effect_health);
+    if (z.effect_spirit) eff.push('蓝条' + (z.effect_spirit > 0 ? '+' : '') + z.effect_spirit);
+    if (z.effect_gold) eff.push('玄币' + (z.effect_gold > 0 ? '+' : '') + z.effect_gold);
+    html += '<tr>'
+      + '<td>' + escapeHtml(z.name) + '</td>'
+      + '<td style="font-size:2.5vw;">' + escapeHtml((z.corners || []).join(',')) + '</td>'
+      + '<td style="font-size:2.5vw;">' + (z.cx != null ? (z.cx + ',' + z.cy + ' r=' + z.r) : '-') + '</td>'
+      + '<td style="font-size:2.5vw;">每 ' + z.interval_min + ' 分 ' + (eff.join(' ') || '无') + '</td>'
+      + '<td>' + (z.allow_enter ? '允许' : '禁止') + '</td>'
+      + '<td>' + (z.enabled ? '开' : '关') + '</td>'
+      + '<td class="op-cell"><div style="display:flex;gap:.8vw;flex-wrap:wrap;">'
+      + '<button class="row-op edit" onclick="openZoneEdit(\'' + escapeHtml(z.id) + '\')">编辑</button>'
+      + '<button class="row-op code" onclick="moveZoneNow(\'' + escapeHtml(z.id) + '\')">移动</button>'
+      + '<button class="row-op del" onclick="delZone(\'' + escapeHtml(z.id) + '\')">删除</button>'
+      + '</div></td></tr>';
+  }
+  html += '</tbody></table>';
+  box.innerHTML = html;
+}
 
 // ══════════ 雷区临时加成：多行 UI ══════════
 const ZN_BUFF_ATTRS = [
@@ -6136,19 +6143,19 @@ function znCollectBuffs() {
   });
   return JSON.stringify(out);
 }
-function openZoneEdit(id) {
-  const z = (id ? _ZONES.find(x => x.id === id) : null) || { corners: ['C3','H3','H8','C8'], interval_min: 1, effect_health: -2, effect_spirit: 0, effect_gold: 0, opacity: 0.45, image: 'imgs/zone/danger.png', allow_enter: true, enabled: true, move_interval_hours: 0, tip: '' };
-  const body = ''
-    + '<div class="form-row"><div><label>名称</label><input id="zn_name" value="' + escapeHtml(z.name || '') + '" placeholder="如 瘴气之地"></div>'
-    + '<div><label>启用</label><select id="zn_enabled"><option value="1"' + (z.enabled ? ' selected' : '') + '>启用</option><option value="0"' + (!z.enabled ? ' selected' : '') + '>停用</option></select></div></div>'
-    + '<div class="form-row"><div><label>四个角（左上、右上、右下、左下，逗号分隔）</label><input id="zn_corners" value="' + escapeHtml((z.corners || []).join(',')) + '" placeholder="如 C3,H3,H8,C8"></div></div>'
-    + '<div class="form-row"><div><label>贴图路径</label><input id="zn_image" value="' + escapeHtml(z.image || 'imgs/zone/danger.png') + '"></div>'
-    + '<div><label>透明度 0~1（越小越淡）</label><input id="zn_opacity" type="number" step="0.05" min="0" max="1" value="' + (z.opacity != null ? z.opacity : 0.45) + '"></div></div>'
-    + '<div class="form-row"><div><label>⭐ 结算间隔 N 分钟（上面"每 N 分钟"就是这个值）</label><input id="zn_interval" type="number" min="1" max="1440" value="' + (z.interval_min || 1) + '"></div>'
-    + '<div><label>玩家能否进入</label><select id="zn_allow"><option value="1"' + (z.allow_enter ? ' selected' : '') + '>允许进入</option><option value="0"' + (!z.allow_enter ? ' selected' : '') + '>禁止进入</option></select></div></div>'
-    + '<div class="form-row"><div><label>每 N 分钟：健康 变化（负数扣血）</label><input id="zn_hp" type="number" value="' + (z.effect_health || 0) + '"></div>'
-    + '<div><label>每 N 分钟：蓝条 变化</label><input id="zn_sp" type="number" value="' + (z.effect_spirit || 0) + '"></div>'
-    + '<div><label>每 N 分钟：玄币 变化</label><input id="zn_gd" type="number" value="' + (z.effect_gold || 0) + '"></div></div>'
+function openZoneEdit(id) {
+  const z = (id ? _ZONES.find(x => x.id === id) : null) || { corners: ['C3','H3','H8','C8'], interval_min: 1, effect_health: -2, effect_spirit: 0, effect_gold: 0, opacity: 0.45, image: 'imgs/zone/danger.png', allow_enter: true, enabled: true, move_interval_hours: 0, tip: '' };
+  const body = ''
+    + '<div class="form-row"><div><label>名称</label><input id="zn_name" value="' + escapeHtml(z.name || '') + '" placeholder="如 瘴气之地"></div>'
+    + '<div><label>启用</label><select id="zn_enabled"><option value="1"' + (z.enabled ? ' selected' : '') + '>启用</option><option value="0"' + (!z.enabled ? ' selected' : '') + '>停用</option></select></div></div>'
+    + '<div class="form-row"><div><label>四个角（左上、右上、右下、左下，逗号分隔）</label><input id="zn_corners" value="' + escapeHtml((z.corners || []).join(',')) + '" placeholder="如 C3,H3,H8,C8"></div></div>'
+    + '<div class="form-row"><div><label>贴图路径</label><input id="zn_image" value="' + escapeHtml(z.image || 'imgs/zone/danger.png') + '"></div>'
+    + '<div><label>透明度 0~1（越小越淡）</label><input id="zn_opacity" type="number" step="0.05" min="0" max="1" value="' + (z.opacity != null ? z.opacity : 0.45) + '"></div></div>'
+    + '<div class="form-row"><div><label>⭐ 结算间隔 N 分钟（上面"每 N 分钟"就是这个值）</label><input id="zn_interval" type="number" min="1" max="1440" value="' + (z.interval_min || 1) + '"></div>'
+    + '<div><label>玩家能否进入</label><select id="zn_allow"><option value="1"' + (z.allow_enter ? ' selected' : '') + '>允许进入</option><option value="0"' + (!z.allow_enter ? ' selected' : '') + '>禁止进入</option></select></div></div>'
+    + '<div class="form-row"><div><label>每 N 分钟：健康 变化（负数扣血）</label><input id="zn_hp" type="number" value="' + (z.effect_health || 0) + '"></div>'
+    + '<div><label>每 N 分钟：蓝条 变化</label><input id="zn_sp" type="number" value="' + (z.effect_spirit || 0) + '"></div>'
+    + '<div><label>每 N 分钟：玄币 变化</label><input id="zn_gd" type="number" value="' + (z.effect_gold || 0) + '"></div></div>'
         + '<div style="background:rgba(46,232,78,.06);border:1px solid rgba(46,232,78,.28);border-radius:10px;padding:2.5vw;margin-bottom:2vw;">'
     + '<div style="display:flex;align-items:center;gap:2vw;margin-bottom:1.5vw;"><label style="margin:0;font-size:3.3vw;font-weight:bold;color:#8effa8;">✨ 临时属性加成</label><select id="zn_buff_on" style="flex:1;padding:1.4vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;"><option value="0"' + (!z.buff_enabled ? ' selected' : '') + '>关闭</option><option value="1"' + (z.buff_enabled ? ' selected' : '') + '>开启</option></select></div>'
     + '<div style="display:flex;gap:1.2vw;font-size:2.5vw;color:rgba(255,255,255,.4);padding:0 0 .8vw 0;border-bottom:1px dashed rgba(255,255,255,.12);margin-bottom:1vw;"><span style="flex:1;">属性</span><span style="width:22vw;text-align:center;">数值</span><span style="width:9vw;text-align:center;">删除</span></div>'
@@ -6160,22 +6167,22 @@ function openZoneEdit(id) {
     + '<div style="display:flex;align-items:center;gap:1.5vw;"><input type="checkbox" id="zn_stop_hp"' + (z.stop_health_regen ? ' checked' : '') + ' style="width:5vw;height:5vw;max-width:22px;max-height:22px;"><label style="margin:0;">🚫 进入此区域：关闭【健康】自动恢复</label></div>'
     + '<div style="display:flex;align-items:center;gap:1.5vw;"><input type="checkbox" id="zn_stop_sp"' + (z.stop_spirit_regen ? ' checked' : '') + ' style="width:5vw;height:5vw;max-width:22px;max-height:22px;"><label style="margin:0;">🚫 进入此区域：关闭【蓝条】自动恢复</label></div>'
     + '</div>'
-    + '<div class="form-row"><div><label>每隔几小时自动换个地方（0 = 不移动）</label><input id="zn_move" type="number" min="0" max="720" value="' + (z.move_interval_hours || 0) + '"></div>'
-    + '<div><label>提示文字</label><input id="zn_tip" value="' + escapeHtml(z.tip || '') + '"></div></div>'
-    + '<div style="font-size:2.6vw;color:rgba(255,255,255,.45);line-height:1.7;">系统取这四个角围成的方框里的<b>最大内接圆</b>作为雷区（边角格不会中招，符合圆形设计）</div>';
-  showModal(id ? '编辑雷区' : '新建雷区', body, async () => {
-    const payload = {
-      id: id || '',
-      name: ($("zn_name").value || '').trim(),
-      corners: ($("zn_corners").value || '').trim(),
-      image: ($("zn_image").value || '').trim(),
-      opacity: parseFloat($("zn_opacity").value),
-      enabled: $("zn_enabled").value === '1',
-      allow_enter: $("zn_allow").value === '1',
-      interval_min: parseInt($("zn_interval").value) || 1,
-      effect_health: parseInt($("zn_hp").value) || 0,
-      effect_spirit: parseInt($("zn_sp").value) || 0,
-      effect_gold: parseInt($("zn_gd").value) || 0,
+    + '<div class="form-row"><div><label>每隔几小时自动换个地方（0 = 不移动）</label><input id="zn_move" type="number" min="0" max="720" value="' + (z.move_interval_hours || 0) + '"></div>'
+    + '<div><label>提示文字</label><input id="zn_tip" value="' + escapeHtml(z.tip || '') + '"></div></div>'
+    + '<div style="font-size:2.6vw;color:rgba(255,255,255,.45);line-height:1.7;">系统取这四个角围成的方框里的<b>最大内接圆</b>作为雷区（边角格不会中招，符合圆形设计）</div>';
+  showModal(id ? '编辑雷区' : '新建雷区', body, async () => {
+    const payload = {
+      id: id || '',
+      name: ($("zn_name").value || '').trim(),
+      corners: ($("zn_corners").value || '').trim(),
+      image: ($("zn_image").value || '').trim(),
+      opacity: parseFloat($("zn_opacity").value),
+      enabled: $("zn_enabled").value === '1',
+      allow_enter: $("zn_allow").value === '1',
+      interval_min: parseInt($("zn_interval").value) || 1,
+      effect_health: parseInt($("zn_hp").value) || 0,
+      effect_spirit: parseInt($("zn_sp").value) || 0,
+      effect_gold: parseInt($("zn_gd").value) || 0,
       move_interval_hours: parseInt($("zn_move").value) || 0,
       // ★ 雷区临时属性加成
       buff_enabled: ($("zn_buff_on") || {}).value === "1" ? 1 : 0,
@@ -6183,30 +6190,30 @@ function openZoneEdit(id) {
             buff_list: znCollectBuffs(),
             // ★ 进入区域是否关闭自动恢复
             stop_health_regen: (document.getElementById("zn_stop_hp") && document.getElementById("zn_stop_hp").checked) ? 1 : 0,
-            stop_spirit_regen: (document.getElementById("zn_stop_sp") && document.getElementById("zn_stop_sp").checked) ? 1 : 0,
-      tip: ($("zn_tip").value || '').trim(),
-    };
-    const res = await api('/api/admin/zoneSave', { method: 'POST', body: JSON.stringify(payload) });
-    if (res.error) return toast(res.error, 'err');
-    toast('已保存');
-    closeModal();
-    loadZones();
+            stop_spirit_regen: (document.getElementById("zn_stop_sp") && document.getElementById("zn_stop_sp").checked) ? 1 : 0,
+      tip: ($("zn_tip").value || '').trim(),
+    };
+    const res = await api('/api/admin/zoneSave', { method: 'POST', body: JSON.stringify(payload) });
+    if (res.error) return toast(res.error, 'err');
+    toast('已保存');
+    closeModal();
+    loadZones();
   }, '保存');
   // ★ 必须用 setTimeout 渲染：admin 的 showModal 没有 afterRender 参数
   //   （第 7 个参数是 hideCancel，之前误传成函数 → 取消按钮被隐藏 + 渲染不执行）
     // ★ 行已在 body 字符串里内联生成，无需 setTimeout 渲染（那样会因为弹窗还没进 DOM 而失败）
-}
-async function delZone(id) {
-  if (!confirm('删除这个雷区？')) return;
-  const res = await api('/api/admin/zoneDelete', { method: 'POST', body: JSON.stringify({ id }) });
-  if (res.error) return toast(res.error, 'err');
-  toast('已删除'); loadZones();
-}
-async function moveZoneNow(id) {
-  const res = await api('/api/admin/zoneMove', { method: 'POST', body: JSON.stringify({ id }) });
-  if (res.error) return toast(res.error, 'err');
-  toast('已移动'); loadZones();
-}
+}
+async function delZone(id) {
+  if (!confirm('删除这个雷区？')) return;
+  const res = await api('/api/admin/zoneDelete', { method: 'POST', body: JSON.stringify({ id }) });
+  if (res.error) return toast(res.error, 'err');
+  toast('已删除'); loadZones();
+}
+async function moveZoneNow(id) {
+  const res = await api('/api/admin/zoneMove', { method: 'POST', body: JSON.stringify({ id }) });
+  if (res.error) return toast(res.error, 'err');
+  toast('已移动'); loadZones();
+}
 
 // ===== 商人：测试辅助 =====
 async function spawnChestsNow() {
