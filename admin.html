@@ -304,7 +304,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
     <div class="tab" data-tab="gomoku" onclick="switchTab('gomoku')">五子棋</div>
     <div class="tab" data-tab="merchant" onclick="switchTab('merchant')">🏪 商人</div>
     <div class="tab" data-tab="logs" onclick="switchTab('logs')">日志</div>
-    <div class="tab" data-tab="backup" onclick="switchTab('backup')">💾 备份</div>
+    <div class="tab" data-tab="backup" onclick="openBackupTab()">💾 备份</div>
   </div>
 
   <!-- 💾 备份管理（独立入口：玩家账号被删了也能在这里找到他的备份并恢复） -->
@@ -730,6 +730,45 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
           <div><label>只修某个玩家（填玩家 ID，可留空）</label><input id="repairPlayerId" placeholder="例如 00001，留空则全服"></div>
           <div style="display:flex;align-items:flex-end;"><button class="action-btn" style="background:linear-gradient(180deg,#ffd700,#c9a800);color:#000;width:100%;font-size:3.2vw;" onclick="repairInventoryUid()">🔧 开始检测并修复</button></div>
         </div>
+      </div>
+
+      <div style="margin-top:2.5vw;padding:2vw;background:rgba(46,232,78,.08);border:1px solid #2ee84e;border-radius:6px;">
+        <div style="font-size:3.4vw;color:#2ee84e;font-weight:bold;margin-bottom:1vw;">🧹 自动清理云端旧数据</div>
+        <div style="font-size:2.6vw;color:rgba(255,255,255,.6);margin-bottom:1.5vw;line-height:1.6;">
+          下面这 9 张表是<b style="color:#ffd700;">只增不删</b>的，跑久了会一直吃云库空间。开启后系统会在玩家心跳时
+          <b style="color:#8effa8;">顺带自动清理过期数据</b>：不额外增加云函数调用次数，全服每 N 小时才真正跑一次，每张表单次最多处理固定条数。<br>
+          ⚠️ 只删<b>早于保留天数</b>的记录，当天 / 进行中的数据不会被碰；找不到的表等于 0 条，不会报错。
+        </div>
+        <div class="form-row">
+          <div><label>自动清理</label><select id="cfg_auto_clean_enabled"><option value="1">开启</option><option value="0">关闭</option></select></div>
+          <div><label>全服每隔几小时跑一次（1-720）</label><input id="cfg_auto_clean_interval_hours" type="number" min="1" max="720" placeholder="12"></div>
+        </div>
+        <div class="form-row">
+          <div><label>每张表单次最多处理条数（10-500）</label><input id="cfg_auto_clean_batch" type="number" min="10" max="500" placeholder="200"></div>
+          <div style="display:flex;align-items:flex-end;"><button class="action-btn" style="background:linear-gradient(180deg,#2ee84e,#1aa838);color:#000;width:100%;font-size:3.2vw;" onclick="saveAutoCleanConfig()">💾 保存清理设置</button></div>
+        </div>
+        <div style="font-size:2.8vw;color:#ffd700;font-weight:bold;margin:2vw 0 1vw;">各表保留天数</div>
+        <div class="form-row">
+          <div><label>操作日志 logs</label><input id="cfg_clean_logs_days" type="number" min="1" max="3650" placeholder="30"></div>
+          <div><label>系统提示 sys_tips</label><input id="cfg_clean_sys_tips_days" type="number" min="1" max="3650" placeholder="7"></div>
+        </div>
+        <div class="form-row">
+          <div><label>私聊消息 chat_messages</label><input id="cfg_clean_chat_days" type="number" min="1" max="3650" placeholder="30"></div>
+          <div><label>送礼记录 trades</label><input id="cfg_clean_trades_days" type="number" min="1" max="3650" placeholder="60"></div>
+        </div>
+        <div class="form-row">
+          <div><label>好友申请 friend_requests</label><input id="cfg_clean_friend_req_days" type="number" min="1" max="3650" placeholder="30"></div>
+          <div><label>决斗记录 friend_duels</label><input id="cfg_clean_duels_days" type="number" min="1" max="3650" placeholder="7"></div>
+        </div>
+        <div class="form-row">
+          <div><label>五子棋房间 gomoku_rooms</label><input id="cfg_clean_gomoku_days" type="number" min="1" max="3650" placeholder="7"></div>
+          <div><label>偷菜记录 farm_steal_logs</label><input id="cfg_clean_farm_steal_days" type="number" min="1" max="3650" placeholder="7"></div>
+        </div>
+        <div class="form-row">
+          <div><label>偷窃记录 steal_logs</label><input id="cfg_clean_steal_days" type="number" min="1" max="3650" placeholder="7"></div>
+          <div></div>
+        </div>
+        <button class="action-btn" style="background:linear-gradient(180deg,#ffd700,#c9a800);color:#000;width:auto;padding:1.5vw 3vw;font-size:3.2vw;margin-top:1.5vw;" onclick="runAutoCleanNow()">🧹 立即清理一次（先统计，再确认）</button>
       </div>
 
       <div class="card-title" style="border-left-color:#4d8cff;font-size:4vw;margin-top:3vw;">💼 打工系统</div>
@@ -1364,7 +1403,7 @@ function renderPlayerList() {
       </div>
       <div class="player-ops">
       <button class="row-op" style="background:#8b5cf6;color:#fff;" onclick="admBackupPlayer('${safeId}')">💾 备份</button>
-      <button class="row-op" style="background:#0ea5e9;color:#fff;" onclick="admShowBackups('${safeId}')">♻️ 恢复</button>
+      <button class="row-op" style="background:#0ea5e9;color:#fff;" onclick="jumpToBackups('${safeId}')" title="跳到「💾 备份」页并自动搜这个玩家">♻️ 备份记录</button>
         <button class="row-op give" onclick="adjustGold('${safeId}', +100)">+100玄币</button>
         <button class="row-op take" onclick="adjustGold('${safeId}', -100)">-100玄币</button>
         <button class="row-op give" onclick="adjustGoldPrompt('${safeId}')">💰改玄币</button>
@@ -1619,12 +1658,19 @@ async function openPlayerInventoryPanel(id, name) {
       if (it.hide_use) flags.push('<span style="color:#888;">🚫 隐藏使用</span>');
       if (it.hide_gift) flags.push('<span style="color:#888;">🚫 隐藏赠送</span>');
       const flagHtml = flags.length ? `<span style="font-size:2.4vw;margin-left:1vw;">${flags.join(' ')}</span>` : '';
+      // ★ 道具描述：后端 adminPlayerInventory 已经把 item_library / shop_items 里的最新 desc 覆盖到每条记录上，
+      //   这里直接展示（多行描述自动换行；没配描述时给一行浅色提示，方便判断是"没写"还是"没显示出来"）
+      const descRaw = String(it.desc == null ? '' : it.desc).trim();
+      const descHtml = descRaw
+        ? `<div style="font-size:2.5vw;color:rgba(255,255,255,.75);line-height:1.5;margin-top:.8vw;background:rgba(0,0,0,.28);border-left:2px solid rgba(255,215,0,.55);border-radius:3px;padding:.9vw 1.4vw;user-select:text;word-break:break-word;">${escapeHtml(descRaw).replace(/\n/g, '<br>')}</div>`
+        : `<div style="font-size:2.4vw;color:rgba(255,255,255,.28);margin-top:.6vw;">（此道具未配置描述）</div>`;
       body += `<div style="display:flex;align-items:center;gap:2vw;background:rgba(255,255,255,.05);padding:2vw;border-radius:6px;">
         ${iconHtml}
         <div style="flex:1;min-width:0;">
           <div style="font-weight:bold;font-size:3.2vw;">${escapeHtml(it.name||it.item_id)} ${flagHtml}</div>
-          <div style="font-size:2.4vw;color:rgba(255,255,255,.4);">ID: <span style="font-family:monospace;">${escapeHtml(it.item_id)}</span></div>
-          <div style="font-size:2.6vw;color:#ffd700;font-weight:bold;margin-top:.5vw;">x${it.qty}</div>
+          <div style="font-size:2.5vw;color:#8effa8;font-family:monospace;margin-top:.4vw;user-select:text;word-break:break-all;">ID: ${escapeHtml(it.item_id)}</div>
+          ${descHtml}
+          <div style="font-size:2.6vw;color:#ffd700;font-weight:bold;margin-top:.8vw;">x${it.qty}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:1vw;flex-shrink:0;">
           <button data-edit-qty data-inv-id="${escapeHtml(it._id||'')}" data-item-id="${escapeHtml(it.item_id)}" data-item-name="${escapeHtml(it.name||it.item_id)}" data-qty="${it.qty}"
@@ -5275,6 +5321,8 @@ async function loadGameConfig() {
   if ($("cfg_chest_prob_normal")) $("cfg_chest_prob_normal").value = c.chest_prob_normal != null ? c.chest_prob_normal : 70;
   if ($("cfg_chest_prob_rare")) $("cfg_chest_prob_rare").value = c.chest_prob_rare != null ? c.chest_prob_rare : 25;
   if ($("cfg_chest_prob_epic")) $("cfg_chest_prob_epic").value = c.chest_prob_epic != null ? c.chest_prob_epic : 5;
+  // ★ 自动清理参数回填
+  fillAutoCleanInputs(c);
 }
 
 async function saveGameConfig() {
@@ -5618,6 +5666,61 @@ async function repairInventoryUid() {
   if (res.error) return toast('修复失败：' + res.error, 'err', 3000);
   toast(`✅ 修复完成：补正 ${res.fixedRows} 条，合并 ${res.mergedRows} 条，涉及 ${res.touchedPlayers} 人`
     + (res.stopped ? '（还没跑完，请再点一次）' : ''), 'ok', 5000);
+}
+
+// ===== 自动清理设置 =====
+// 这 9 张表只增不删，不清理会一直吃云库空间。
+// 真正的清理在后端心跳里跑（全服节流），这里只负责读/写保留天数 + 手动触发一轮。
+const AUTO_CLEAN_DAY_FIELDS = [
+  ["cfg_clean_logs_days",       "clean_logs_days",       30],
+  ["cfg_clean_sys_tips_days",   "clean_sys_tips_days",   7],
+  ["cfg_clean_chat_days",       "clean_chat_days",       30],
+  ["cfg_clean_trades_days",     "clean_trades_days",     60],
+  ["cfg_clean_friend_req_days", "clean_friend_req_days", 30],
+  ["cfg_clean_duels_days",      "clean_duels_days",      7],
+  ["cfg_clean_gomoku_days",     "clean_gomoku_days",     7],
+  ["cfg_clean_farm_steal_days", "clean_farm_steal_days", 7],
+  ["cfg_clean_steal_days",      "clean_steal_days",      7],
+];
+function fillAutoCleanInputs(c) {
+  const set = function (id, v) { const el = $(id); if (el) el.value = v; };
+  set("cfg_auto_clean_enabled", (c.auto_clean_enabled === false) ? "0" : "1");
+  set("cfg_auto_clean_interval_hours", c.auto_clean_interval_hours != null ? c.auto_clean_interval_hours : 12);
+  set("cfg_auto_clean_batch", c.auto_clean_batch != null ? c.auto_clean_batch : 200);
+  AUTO_CLEAN_DAY_FIELDS.forEach(function (row) {
+    set(row[0], c[row[1]] != null ? c[row[1]] : row[2]);
+  });
+}
+async function saveAutoCleanConfig() {
+  const gi = function (id, def) { const el = $(id); const n = parseInt(el && el.value); return isNaN(n) ? def : n; };
+  const fields = {
+    auto_clean_enabled: (($("cfg_auto_clean_enabled") || {}).value === "1"),
+    auto_clean_interval_hours: gi("cfg_auto_clean_interval_hours", 12),
+    auto_clean_batch: gi("cfg_auto_clean_batch", 200),
+  };
+  AUTO_CLEAN_DAY_FIELDS.forEach(function (row) { fields[row[1]] = gi(row[0], row[2]); });
+  const res = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields }) });
+  if (res.error) return toast('保存失败：' + res.error, 'err');
+  toast('已保存自动清理设置', 'ok');
+}
+async function runAutoCleanNow() {
+  toast('正在统计（不删除）…');
+  const dry = await api('/api/admin/runAutoClean', { method: 'POST', body: JSON.stringify({ dryRun: true }) });
+  if (dry.error) return toast('统计失败：' + dry.error, 'err', 3000);
+  const rem = dry.removed || {};
+  const rows = Object.keys(rem).filter(function (k) { return rem[k] > 0; });
+  if (!rows.length) return toast('✅ 没有超过保留期的数据，不需要清理', 'ok', 3500);
+  const detail = rows.map(function (k) { return '　' + k + '：' + rem[k] + ' 条'; }).join('\n');
+  if (!confirm('将清理以下过期数据：\n\n' + detail + '\n\n合计 ' + (dry.total || 0) + ' 条'
+    + '\n（每张表本次最多处理固定条数，量大的话可以再点几次）\n\n确认执行？')) return;
+  toast('正在清理…');
+  const res = await api('/api/admin/runAutoClean', { method: 'POST', body: JSON.stringify({}) });
+  if (res.error) return toast('清理失败：' + res.error, 'err', 3000);
+  const r2 = res.removed || {};
+  const rows2 = Object.keys(r2).filter(function (k) { return r2[k] > 0; });
+  toast('✅ 已清理 ' + (res.total || 0) + ' 条'
+    + (rows2.length ? '（' + rows2.map(function (k) { return k + ':' + r2[k]; }).join('，') + '）' : '')
+    + '（量大的话可以再点几次）', 'ok', 5000);
 }
 
 // ===== 弹窗 =====
@@ -6027,28 +6130,24 @@ async function admBackupPlayer(id) {
   if (r.error) return toast(r.error, "err");
   toast("✅ 已备份", "ok", 1800);
 }
-async function admShowBackups(id) {
-  id = String(id || "").trim();
-  if (!id) return toast("缺少玩家 ID", "err");
-  const r = await api("/api/admin/backupList?id=" + encodeURIComponent(id));
-  if (r.error) return toast(r.error, "err");
-  const list = r.backups || [];
-  if (!list.length) { showModal("♻️ 备份记录", '<div class="empty">还没有备份<br><span style="font-size:2.8vw;color:rgba(255,255,255,.35);">点「💾 备份」立刻存一份</span></div>', null, "关闭", null, true); return; }
-  const tag = { manual: "手动", auto_before_update: "改前自动", before_restore: "恢复前" };
-  let html = '<div style="font-size:2.8vw;color:rgba(255,255,255,.5);margin-bottom:2vw;">共 ' + list.length + ' 份　含：属性/玄币/健康 + 背包/称号/副业/种田（每人最多 20 份）</div>';
-  html += '<div style="display:flex;flex-direction:column;gap:1.6vw;max-height:52vh;overflow-y:auto;">';
-  list.forEach(function (b) {
-    const t = new Date((b.created_at || 0) * 1000);
-    const ts = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0") + " " + String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
-    html += '<div style="display:flex;align-items:center;gap:2vw;padding:2vw 2.4vw;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);">'
-      + '<div style="flex:1;min-width:0;"><div style="font-size:3vw;color:#fff;font-weight:bold;">' + ts + '</div>'
-      + '<div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin-top:.6vw;">' + (tag[b.reason] || b.reason || "") + '　等级 ' + (b.lv || 0) + '　玄币 ' + (b.gold || 0) + '　<span style="color:#8effa8;">含 ' + (b.parts || 1) + ' 项数据</span></div></div>'
-      + '<button class="mini-op green" onclick="admRestoreBackup(\'' + b.id + '\')">恢复</button>'
-      + '<button class="mini-op red" onclick="admDeleteBackup(\'' + b.id + '\')">删</button>'
-      + '</div>';
-  });
-  html += '</div>';
-  showModal("♻️ 备份记录 · " + id, html, null, "关闭", null, true);
+// 点顶部「💾 备份」标签时清空搜索框，避免上次从某个玩家跳过来时的过滤条件一直留着，
+// 让人误以为"备份都不见了"。从玩家行跳转走的是 jumpToBackups（保留预填）。
+function openBackupTab() {
+  const inp = $("backupSearch");
+  if (inp) inp.value = "";
+  switchTab('backup');
+}
+
+// ★ 备份记录统一只在「💾 备份」独立页看（列表/恢复/删除只实现一次，不再两套 UI 维护）
+//   这里只负责跳转，并把这个玩家的 ID 预填进搜索框 —— 保留"从某个玩家直接看他的备份"这个便利。
+function jumpToBackups(id) {
+  const kw = String(id || "").trim();
+  const inp = $("backupSearch");
+  if (inp) inp.value = kw;
+  // 已经在备份页 → 直接重载列表（renderBackupList 会按搜索框过滤）
+  if (curTab === 'backup') { loadBackupList(); return; }
+  // 否则切页：switchTab 内部会 refreshAll() → loadBackupList()
+  switchTab('backup');
 }
 async function admRestoreBackup(backupId) {
   if (!confirm("确认恢复到这份备份？\n\n如果玩家账号已被删除，会按这份备份重建整个账号。\n当前状态会先自动备份一份，所以恢复错了还能再退回来。")) return;
