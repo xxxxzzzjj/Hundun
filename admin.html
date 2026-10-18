@@ -131,6 +131,59 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
   font-size:4vw; font-weight:bold; cursor:pointer; background:rgba(255,255,255,.15); color:#fff; }
 .modal-foot .ok { background:linear-gradient(180deg,#ef2b3a,#b8121f); }
 
+/* ===== 移动端操作性优化（纯 CSS） ===== */
+/* 1) 弹窗底部按钮固定：表单再长，保存/关闭也不会滚出屏幕 */
+.modal-foot {
+  position: sticky; bottom: 0; z-index: 5;
+  background: #1c1922;
+  padding: 2.5vw 0 3vw;
+  margin-top: 3vw;
+  box-shadow: 0 -10px 18px rgba(0,0,0,.65);
+}
+
+/* 2) 顶部标签：13 个标签原来会折成 3 排（电脑上因为 vw 单位大，甚至能折 5 排），
+      吃掉半个屏幕。改成「永远单行 + 横向滑动」—— 手机和电脑都生效，不看断点。
+      滚动条保留成一条细条，这样电脑上也能一眼看出"右边还有标签没显示"。 */
+.tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.28) transparent;
+}
+.tabs::-webkit-scrollbar { height: 6px; }
+.tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.28); border-radius: 3px; }
+.tabs::-webkit-scrollbar-track { background: transparent; }
+.tab {
+  flex: 0 0 auto;
+  min-width: auto;
+  padding: clamp(7px, 2.4vw, 14px) clamp(11px, 3.4vw, 22px);
+  font-size: clamp(12px, 3.3vw, 15px);
+}
+
+@media (max-width: 900px) {
+  /* 3) 表格操作列：会被 JS 搬到每行最前面，这里让它横向滑动时固定在左边，
+        这样滑到后面看数据时，按钮也一直可见 */
+  td.op-cell, th.op-cell {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: #221e2a;
+    box-shadow: 8px 0 12px rgba(0,0,0,.6);
+  }
+  /* 操作列里的按钮竖着排，避免横排撑宽 */
+  td.op-cell .op-wrap { flex-direction: column; align-items: stretch; }
+  td.op-cell .row-op { margin: .4vw 0; }
+
+  /* 4) 宽表格里的输入框别把列撑爆 */
+  td input, td select { min-width: 0; }
+}
+
+/* 5) 弹窗在矮屏上留出更多空间（手机上 85vh 会贴边） */
+@media (max-height: 700px) {
+  .modal { max-height: 92vh; padding: 4.5vw; }
+}
+
 /* 图片上传控件 */
 .img-upload { display:flex; align-items:center; gap:2vw; margin-top:2vw; }
 .img-upload .file-btn { padding:2.5vw 4vw; background:linear-gradient(180deg,#3b82f6,#1e5fb8);
@@ -1159,6 +1212,64 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ===== 把表格的「操作」列搬到每行最前面 =====
+// 为什么要做：手机屏窄，表格有 5~11 列，操作按钮在最右边 → 每次改东西都得横向滑到底。
+// 做法：直接「移动」DOM 节点（不是复制 innerHTML），所以 inline onclick 和后续
+//       JS 绑定的点击事件都不会丢；表头 th 同步搬，保证列不会错位。
+// 覆盖范围：任何被插入到页面的 table 都会被自动处理（弹窗、tab 内容、动态刷新都算），
+//       靠 MutationObserver 兜住，不需要在每个渲染函数里单独调用。
+function _opsToFront(root) {
+  try {
+    const scope = (root && root.querySelectorAll) ? root : document;
+    const tables = [];
+    if (scope.tagName === 'TABLE') tables.push(scope);
+    if (scope.querySelectorAll) scope.querySelectorAll('table').forEach(function (t) { tables.push(t); });
+    tables.forEach(function (tbl) {
+      if (tbl.dataset && tbl.dataset.opsFront === '1') return;   // 已处理，避免重复搬运
+      const firstRow = tbl.querySelector('tbody tr');
+      if (!firstRow) return;
+      const cells = Array.prototype.slice.call(firstRow.children);
+      let opIdx = -1;
+      for (let i = 0; i < cells.length; i++) {
+        if (cells[i].classList && cells[i].classList.contains('op-cell')) { opIdx = i; break; }
+      }
+      if (opIdx <= 0) { if (tbl.dataset) tbl.dataset.opsFront = '1'; return; }  // 没找到 / 已经在最前
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        const td = tr.children[opIdx];
+        if (td) tr.insertBefore(td, tr.firstChild);
+      });
+      tbl.querySelectorAll('thead tr').forEach(function (tr) {
+        const th = tr.children[opIdx];
+        if (th) tr.insertBefore(th, tr.firstChild);
+      });
+      if (tbl.dataset) tbl.dataset.opsFront = '1';
+    });
+  } catch (e) { console.error('[_opsToFront]', e); }
+}
+
+function _initOpsToFront() {
+  try {
+    const obs = new MutationObserver(function (muts) {
+      for (let i = 0; i < muts.length; i++) {
+        const added = muts[i].addedNodes;
+        if (!added) continue;
+        for (let j = 0; j < added.length; j++) {
+          const n = added[j];
+          if (!n || n.nodeType !== 1) continue;
+          if (n.tagName === 'TABLE' || (n.querySelector && n.querySelector('table'))) _opsToFront(n);
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    _opsToFront(document);
+  } catch (e) { console.error('[opsToFront init]', e); }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initOpsToFront);
+} else {
+  _initOpsToFront();
+}
+
 // 把 <input type=file> + 目标 textarea + 预览图 绑成一组
 // 选择本地图片后自动读取成 base64 并填入 textarea，同时显示预览
 // 自动压缩：> 400KB 走 canvas 压成 ≤ 300KB JPEG
@@ -1411,6 +1522,7 @@ function renderPlayerList() {
         <button class="row-op code" style="background:rgba(255,140,0,.2);border:1px solid #ff8c00;" onclick="openEditDmPanel('${safeId}','${safeDm}','${safeName}')">🔑改DM</button>
         <button class="row-op code" onclick="setPlayerOrderPrompt('${safeId}',${so})">#顺序</button>
         <button class="row-op code" onclick="openPlayerInventoryPanel('${safeId}','${safeName}')">🎒背包</button>
+        <button class="row-op code" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;" onclick="showPlayerCultivation('${safeId}','${safeName}')">🧘 修行灵力</button>
         <button class="row-op code" onclick="openTransferPlayerPanel('${safeId}','${safeName}')">📍改位置</button>
         <button class="row-op code" onclick="openBindTitlePanel('${safeId}','${safeName}')">📛+称号</button>
         <button class="row-op code" onclick="openManageTitlesPanel('${safeId}','${safeName}')">📛称号管理</button>
@@ -1635,6 +1747,100 @@ async function adminDeleteFriend(playerId, friendId) {
 }
 
 // 查看玩家的背包
+// 🧘 查看玩家的修行灵力：门派技能（等级 / 是否解锁）+ 副业技能（剩余次数）
+//   直接复用玩家端的两个只读接口，后台不需要额外权限，也不新增后端代码。
+async function showPlayerCultivation(id, name) {
+  let sectRes = null, sjRes = null;
+  try {
+    const arr = await Promise.all([
+      api('/api/sectSkills?id=' + encodeURIComponent(id)),
+      api('/api/sidejobSkills?id=' + encodeURIComponent(id)),
+    ]);
+    sectRes = arr[0]; sjRes = arr[1];
+  } catch (e) { return toast('读取失败：' + (e.message || e), 'err', 3000); }
+  const sects = (sectRes && sectRes.sects) || [];
+  const sidejobs = (sjRes && sjRes.sidejobs) || [];
+  if (!sects.length && !sidejobs.length && sectRes && sectRes.error && sjRes && sjRes.error) {
+    return toast(sectRes.error, 'err', 3000);
+  }
+  const lv = (sectRes && sectRes.playerLv) || (sjRes && sjRes.playerLv) || 1;
+  const stock = (sectRes && sectRes.stock != null) ? sectRes.stock : ((sjRes && sjRes.stock) || 0);
+  const spirit = (sectRes && sectRes.spirit != null) ? sectRes.spirit : ((sjRes && sjRes.spirit) || 0);
+
+  let body = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5vw;margin-bottom:2.5vw;padding:2vw;background:rgba(0,0,0,.25);border-radius:8px;text-align:center;">'
+    + '<div><div style="font-size:2.4vw;color:rgba(255,255,255,.4);">等级</div><div style="font-size:3.6vw;color:#fff;font-weight:bold;">Lv.' + lv + '</div></div>'
+    + '<div><div style="font-size:2.4vw;color:rgba(255,255,255,.4);">蓝条 stock</div><div style="font-size:3.6vw;color:#4d8cff;font-weight:bold;">' + stock + '</div></div>'
+    + '<div><div style="font-size:2.4vw;color:rgba(255,255,255,.4);">精神 spirit</div><div style="font-size:3.6vw;color:#c084fc;font-weight:bold;">' + spirit + '</div></div>'
+    + '</div>';
+
+  // ===== 门派修行 =====
+  body += '<div style="font-size:3.4vw;color:#ffd700;font-weight:bold;margin:2vw 0 1.5vw;">📜 门派修行（' + sects.length + ' 个门派）</div>';
+  if (!sects.length) {
+    body += '<div class="empty">没有绑定任何门派</div>';
+  } else {
+    sects.forEach(function (sec) {
+      const list = sec.skills || [];
+      const unlockedN = list.filter(function (s) { return s.unlocked; }).length;
+      body += '<div style="border:1px solid rgba(255,215,0,.25);border-radius:8px;padding:2vw;margin-bottom:1.6vw;background:rgba(255,215,0,.05);">'
+        + '<div style="font-size:3.2vw;font-weight:bold;color:#fff;margin-bottom:1.2vw;">' + escapeHtml(sec.name)
+        + ' <span style="font-size:2.5vw;color:rgba(255,255,255,.5);font-weight:normal;">已解锁 ' + unlockedN + '/' + list.length + '</span></div>';
+      if (!list.length) {
+        body += '<div style="font-size:2.6vw;color:rgba(255,255,255,.35);">该门派还没配置技能</div>';
+      } else {
+        list.forEach(function (s) {
+          const c = s.unlocked ? '#2ee84e' : 'rgba(255,255,255,.35)';
+          body += '<div style="display:flex;align-items:center;gap:2vw;padding:1.6vw 0;border-top:1px solid rgba(255,255,255,.07);">'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:2.9vw;color:' + c + ';font-weight:bold;">' + (s.unlocked ? '✅ ' : '🔒 ') + escapeHtml(s.name) + '</div>'
+            + '<div style="font-size:2.3vw;color:rgba(255,255,255,.4);font-family:monospace;word-break:break-all;">ID: ' + escapeHtml(s.id) + '</div>'
+            + (s.desc ? '<div style="font-size:2.3vw;color:rgba(255,255,255,.5);margin-top:.4vw;">' + escapeHtml(s.desc) + '</div>' : '')
+            + '</div>'
+            + '<div style="text-align:right;flex-shrink:0;font-size:2.5vw;line-height:1.7;color:rgba(255,255,255,.6);">'
+            + '<div>等级 <b style="color:#ffd700;">Lv.' + (s.level || 0) + '</b></div>'
+            + '<div>蓝耗 ' + (s.blue_cost || 0) + '</div>'
+            + '<div>需 Lv.' + (s.lv_required || 1) + (s.reachable ? '' : ' <span style="color:#ff4d5a;">(未达)</span>') + '</div>'
+            + '</div></div>';
+        });
+      }
+      body += '</div>';
+    });
+  }
+
+  // ===== 副业技能 =====
+  body += '<div style="font-size:3.4vw;color:#c084fc;font-weight:bold;margin:2.5vw 0 1.5vw;">🛠️ 副业技能（' + sidejobs.length + ' 个副业）</div>';
+  if (!sidejobs.length) {
+    body += '<div class="empty">没有绑定任何副业</div>';
+  } else {
+    sidejobs.forEach(function (sj) {
+      const list = sj.skills || [];
+      const total = list.reduce(function (a, s) { return a + (parseInt(s.count) || 0); }, 0);
+      body += '<div style="border:1px solid rgba(192,132,252,.25);border-radius:8px;padding:2vw;margin-bottom:1.6vw;background:rgba(192,132,252,.05);">'
+        + '<div style="font-size:3.2vw;font-weight:bold;color:#fff;margin-bottom:1.2vw;">' + escapeHtml(sj.name)
+        + ' <span style="font-size:2.5vw;color:rgba(255,255,255,.5);font-weight:normal;">剩余总次数 ' + total + '</span></div>';
+      if (!list.length) {
+        body += '<div style="font-size:2.6vw;color:rgba(255,255,255,.35);">该副业还没配置技能</div>';
+      } else {
+        list.forEach(function (s) {
+          const cnt = parseInt(s.count) || 0;
+          const c = cnt > 0 ? '#2ee84e' : 'rgba(255,255,255,.35)';
+          body += '<div style="display:flex;align-items:center;gap:2vw;padding:1.6vw 0;border-top:1px solid rgba(255,255,255,.07);">'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:2.9vw;color:' + c + ';font-weight:bold;">' + (cnt > 0 ? '✅ ' : '🔒 ') + escapeHtml(s.name) + '</div>'
+            + '<div style="font-size:2.3vw;color:rgba(255,255,255,.4);font-family:monospace;word-break:break-all;">ID: ' + escapeHtml(s.id) + '</div>'
+            + '</div>'
+            + '<div style="text-align:right;flex-shrink:0;font-size:2.5vw;line-height:1.7;color:rgba(255,255,255,.6);">'
+            + '<div>剩余次数 <b style="color:' + c + ';font-size:3.4vw;">' + cnt + '</b></div>'
+            + '<div>需 Lv.' + (s.lv_required || 0) + (s.reachable ? '' : ' <span style="color:#ff4d5a;">(未达)</span>') + '</div>'
+            + '</div></div>';
+        });
+      }
+      body += '</div>';
+    });
+  }
+
+  showModal('🧘 ' + (name || id) + ' 的修行灵力', body, function () { closeModal(); }, '关闭');
+}
+
 // 后端玩家背包面板（在玩家列表直接点击查看+编辑+删除道具）
 async function openPlayerInventoryPanel(id, name) {
   const res = await api('/api/admin/playerInventory?id=' + encodeURIComponent(id));
@@ -3380,29 +3586,28 @@ async function manageSidejobSkills(sidejobId, sidejobName) {
   if (!skills.length) {
     html += '<div class="empty">暂无技能</div>';
   } else {
-    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
-    html += '<table style="min-width:140vw;"><thead><tr><th>ID</th><th>名称</th><th>解锁Lv</th><th>消耗道具</th><th>获得数量</th><th>可转移</th><th>显示升级</th><th style="min-width:30vw;">操作</th></tr></thead><tbody>';
+    // ★ 移动端优化：不再用宽表格（min-width:140vw 必须横向滑到右边才能点到操作按钮），
+    //   改成"每个技能一张卡片"，按钮放在卡片最上面一排 —— 不用横向滚动就能直接点。
+    html += '<div style="display:flex;flex-direction:column;gap:1.6vw;">';
     skills.forEach(s => {
-      html += `<tr>
-        <td><span class="id-tag">${escapeHtml(s.id)}</span></td>
-        <td>${escapeHtml(s.name)}</td>
-        <td>Lv.${s.lv_required||0}${s.lv_required===0?'+':''}</td>
-        <td style="font-size:2.4vw;">${s.cost_item_id ? `${escapeHtml(s.cost_item_id)}×${s.cost_item_qty||1}` : '-'}</td>
-        <td>+${s.gain_qty||1}</td>
-        <td>${s.transferrable ? '✓' : '✗'}</td>
-        <td>${s.show_upgrade===false ? '<span style="color:#888;">🚫 隐藏</span>' : '<span style="color:#2ee84e;">✅ 显示</span>'}</td>
-        <td class="op-cell" style="min-width:30vw;">
-          <div class="op-wrap" style="justify-content:flex-start;display:flex;flex-direction:column;gap:1vw;">
-            <div style="display:flex;gap:.8vw;flex-wrap:wrap;">
-              <button class="row-op edit" onclick="editSidejobSkill('${escapeHtml(s.id)}')">编辑</button>
-              <button class="row-op code" onclick="copySidejobSkill('${escapeHtml(s.id)}')">📋 复制</button>
-              <button class="row-op del" onclick="deleteSidejobSkill('${escapeHtml(s.id)}')">🗑️ 删除</button>
-            </div>
-          </div>
-        </td>
-      </tr>`;
+      html += `<div style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:2vw;background:rgba(255,255,255,.04);">
+        <div style="display:flex;gap:1.2vw;flex-wrap:wrap;margin-bottom:1.4vw;">
+          <button class="row-op edit" onclick="editSidejobSkill('${escapeHtml(s.id)}')">✏️ 编辑</button>
+          <button class="row-op code" onclick="copySidejobSkill('${escapeHtml(s.id)}')">📋 复制</button>
+          <button class="row-op del" onclick="deleteSidejobSkill('${escapeHtml(s.id)}')">🗑️ 删除</button>
+        </div>
+        <div style="font-size:3vw;font-weight:bold;color:#fff;margin-bottom:.6vw;">${escapeHtml(s.name)}</div>
+        <div style="font-size:2.4vw;color:#8effa8;font-family:monospace;word-break:break-all;margin-bottom:1vw;">ID: ${escapeHtml(s.id)}</div>
+        <div style="font-size:2.5vw;color:rgba(255,255,255,.6);line-height:1.8;">
+          <span style="margin-right:2vw;">解锁 Lv.${s.lv_required||0}${s.lv_required===0?'+':''}</span>
+          <span style="margin-right:2vw;">消耗 ${s.cost_item_id ? escapeHtml(s.cost_item_id) + '×' + (s.cost_item_qty||1) : '无'}</span>
+          <span style="margin-right:2vw;">获得 +${s.gain_qty||1}</span>
+          <span style="margin-right:2vw;">可转移 ${s.transferrable ? '✓' : '✗'}</span>
+          <span>升级按钮 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+        </div>
+      </div>`;
     });
-    html += '</tbody></table></div>';
+    html += '</div>';
   }
   html += `<button class="action-btn green" style="margin-top:2vw;" onclick="showCreateSidejobSkill('${escapeHtml(sidejobId)}')">+ 新建技能</button>`;
   showModal(`管理副业技能：${escapeHtml(sidejobName)}（${skills.length}）`, html, () => closeModal(), '关闭');
@@ -3903,30 +4108,27 @@ async function manageSectSkills(sectId, sectName) {
   if (!skills.length) {
     html += '<div class="empty">暂无技能</div>';
   } else {
-    // 用 overflow-x:auto 包裹表格，保证列多时可以横向滚；操作列固定到最右
-    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
-    html += '<table style="min-width:120vw;"><thead><tr><th>ID</th><th>名称</th><th>解锁等级</th><th>升级消耗</th><th>使用蓝条</th><th>可转移</th><th>显示升级</th><th style="min-width:30vw;">操作</th></tr></thead><tbody>';
+    // ★ 移动端优化：改成卡片列表，按钮放最上面一排，不用横向滑到最右边
+    html += '<div style="display:flex;flex-direction:column;gap:1.6vw;">';
     skills.forEach(s => {
-      html += `<tr>
-        <td><span class="id-tag">${escapeHtml(s.id)}</span></td>
-        <td>${escapeHtml(s.name)}</td>
-        <td>Lv.${s.lv_required||1}</td>
-        <td style="font-size:2.4vw;">${s.upgrade_cost_item_id ? `${escapeHtml(s.upgrade_cost_item_id)}×${s.upgrade_cost_item_qty||1}` : '-'}${s.upgrade_blue_cost ? ` +蓝${s.upgrade_blue_cost}` : ''}</td>
-        <td>${s.blue_cost||0}</td>
-        <td>${s.transferrable ? '✓' : '✗'}</td>
-        <td>${s.show_upgrade===false ? '<span style="color:#888;">🚫 隐藏</span>' : '<span style="color:#2ee84e;">✅ 显示</span>'}</td>
-        <td class="op-cell" style="min-width:30vw;">
-          <div class="op-wrap" style="justify-content:flex-start;display:flex;flex-direction:column;gap:1vw;">
-            <div style="display:flex;gap:.8vw;flex-wrap:wrap;">
-              <button class="row-op edit" onclick="editSectSkill('${escapeHtml(s.id)}')">编辑</button>
-              <button class="row-op code" onclick="copySectSkill('${escapeHtml(s.id)}')">📋 复制</button>
-              <button class="row-op del" onclick="deleteSectSkill('${escapeHtml(s.id)}')">🗑️ 删除</button>
-            </div>
-          </div>
-        </td>
-      </tr>`;
+      html += `<div style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:2vw;background:rgba(255,255,255,.04);">
+        <div style="display:flex;gap:1.2vw;flex-wrap:wrap;margin-bottom:1.4vw;">
+          <button class="row-op edit" onclick="editSectSkill('${escapeHtml(s.id)}')">✏️ 编辑</button>
+          <button class="row-op code" onclick="copySectSkill('${escapeHtml(s.id)}')">📋 复制</button>
+          <button class="row-op del" onclick="deleteSectSkill('${escapeHtml(s.id)}')">🗑️ 删除</button>
+        </div>
+        <div style="font-size:3vw;font-weight:bold;color:#fff;margin-bottom:.6vw;">${escapeHtml(s.name)}</div>
+        <div style="font-size:2.4vw;color:#8effa8;font-family:monospace;word-break:break-all;margin-bottom:1vw;">ID: ${escapeHtml(s.id)}</div>
+        <div style="font-size:2.5vw;color:rgba(255,255,255,.6);line-height:1.8;">
+          <span style="margin-right:2vw;">解锁 Lv.${s.lv_required||1}</span>
+          <span style="margin-right:2vw;">使用蓝条 ${s.blue_cost||0}</span>
+          <span style="margin-right:2vw;">升级消耗 ${s.upgrade_cost_item_id ? escapeHtml(s.upgrade_cost_item_id) + '×' + (s.upgrade_cost_item_qty||1) : '无'}${s.upgrade_blue_cost ? ' +蓝' + s.upgrade_blue_cost : ''}</span>
+          <span style="margin-right:2vw;">可转移 ${s.transferrable ? '✓' : '✗'}</span>
+          <span>升级按钮 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+        </div>
+      </div>`;
     });
-    html += '</tbody></table></div>';
+    html += '</div>';
   }
   html += `<button class="action-btn green" style="margin-top:2vw;" onclick="showCreateSectSkill('${escapeHtml(sectId)}')">+ 新建技能</button>`;
   showModal(`管理技能：${escapeHtml(sectName)}（${skills.length}）`, html, () => closeModal(), '关闭');

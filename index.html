@@ -4112,43 +4112,9 @@ function enterHall() {
 
   sysTip("欢迎回来，" + curPlayer.name + "！");
 
-  // === 3 秒同步循环 ===
+  // === 同步轮询（页面切到后台会自动全部暂停，见 startSyncTimers / stopSyncTimers）===
 
-  if (window._syncTimers) {
-
-    Object.values(window._syncTimers).forEach(t => clearInterval(t));
-
-  }
-
-  window._syncTimers = {};
-
-  // 心跳（保持在线状态，3 秒一次）
-
-  heartbeat();
-
-  window._syncTimers.heartbeat = setInterval(heartbeat, 15000);
-
-  // 全服系统提示
-
-  pullSysTips();
-
-  window._syncTimers.sysTips = setInterval(pullSysTips, 3000);
-
-  // 地图在线玩家刷新（5 秒）
-
-  refreshOnlineMap();
-
-  window._syncTimers.onlineMap = setInterval(refreshOnlineMap, 3000);
-
-  // 好友申请数（5 秒）
-
-  pullFriendRequestBadge();
-
-  window._syncTimers.friendBadge = setInterval(pullFriendRequestBadge, 5000);
-
-  // 私聊轮询：启动（内部会先清旧的再建，登出再登录也能恢复正常）
-  //   pollOpenChats 内部会判断"有没有打开的聊天窗口"，没有就一个请求都不发
-  if (typeof startChatPolling === 'function') startChatPolling();
+  startSyncTimers();
 
   window.addEventListener('beforeunload', () => {
 
@@ -4178,6 +4144,106 @@ function enterHall() {
 
 }
 
+// ==== 同步轮询：启动 / 暂停 ====
+// 省云端配额的关键在这里：玩家把页面切到后台（手机锁屏、切到别的 App、切到别的标签页）时，
+// 这些东西他根本看不到，请求纯属白烧云函数调用次数和流量 —— 所以一律停掉。
+// 回到前台再整体重启，每个接口会立刻拉一次，所以不会有"数据陈旧"的感觉。
+const SYNC_INTERVAL = {
+  heartbeat: 15000,   // 心跳：15 秒（保活 + 驱动各种懒结算，不能再低了）
+  sync: 15000,        // 合并拉取：一次请求同时拿「全服提示 + 地图在线玩家 + 好友红点」
+};
+let _syncPaused = false;
+
+function startSyncTimers() {
+  stopSyncTimers();
+  _syncPaused = false;
+  // 心跳（保持在线状态 + 驱动亲密度/打工/种田等懒结算）—— 永远不暂停，见下面的说明
+  heartbeat();
+  window._syncTimers.heartbeat = setInterval(heartbeat, SYNC_INTERVAL.heartbeat);
+  // 合并拉取：一次请求同时拿「全服提示 + 地图在线玩家 + 好友申请红点」
+  //   如果登录时页面就在后台，先不启动（等回到前台再由 visibilitychange 接上）
+  if (document.hidden) {
+    _syncPaused = true;
+  } else {
+    syncTick();
+    window._syncTimers.sync = setInterval(syncTick, SYNC_INTERVAL.sync);
+    // 私聊轮询：内部会先清旧的再建；pollOpenChats 内部判断"有没有打开的聊天窗口"，
+    //   没有就一个请求都不发
+    if (typeof startChatPolling === 'function') startChatPolling();
+  }
+}
+
+// 合并拉取：替代原来「提示 / 地图 / 好友红点」三个独立轮询。
+// 关键设计：拿到哪一项就走哪一项的「预取」路径，没拿到的那项退回它自己的单独请求 ——
+//   所以就算新接口还没部署、或者某一项临时出错，功能也完全不受影响（只是那一轮多一次请求）。
+async function syncTick() {
+  if (!curId) return;
+  const since = _sysTipsFirstLoad ? 0 : (parseInt(_lastSysTipTs) || 0);
+  let res = null;
+  try {
+    res = await api('/api/sync?id=' + encodeURIComponent(curId) + (since > 0 ? '&since=' + since : ''));
+  } catch (e) { res = null; }
+  if (!res || res.error || !res.ok) {
+    // 合并接口不可用 → 退回三个独立请求（和改之前的行为一模一样）
+    pullSysTips();
+    refreshOnlineMap();
+    pullFriendRequestBadge();
+    return;
+  }
+  if (res.tips) pullSysTips({ ok: true, tips: res.tips }); else pullSysTips();
+  if (res.places) refreshOnlineMap({ ok: true, places: res.places }); else refreshOnlineMap();
+  if (res.friendBadge) {
+    pullFriendRequestBadge({ ok: true, incoming: res.friendBadge.incoming, outgoing: res.friendBadge.outgoing });
+  } else {
+    pullFriendRequestBadge();
+  }
+}
+
+function stopSyncTimers() {
+  if (window._syncTimers) {
+    Object.values(window._syncTimers).forEach(t => clearInterval(t));
+  }
+  window._syncTimers = {};
+  // 私聊轮询也要停，否则切后台还在每 3 秒拉一次聊天记录
+  if (window._chatPollInterval) {
+    clearInterval(window._chatPollInterval);
+    window._chatPollInterval = null;
+  }
+}
+
+// 切到后台：只停「合并拉取」；回到前台：恢复并立即刷新一次
+//   ★ 心跳必须继续跑，不能停。原因：蓝条恢复（tickSpiritRegen）、健康恢复（tickDangerZones）、
+//     打工进度（tickJob）、亲密度结算（settleIntimacy）全都是「每次心跳加一次」，
+//     不是按流逝时间补算的。实测逻辑：now - lastTick >= 间隔 → 加一次并把 lastTick 设为 now。
+//     所以如果切后台就把心跳停掉，玩家挂机 2 小时回来，蓝条只会涨 1 点 —— 等于白挂。
+//     心跳本身只有 4 次/分，留着它对配额影响很小，但保住了全部挂机收益。
+document.addEventListener('visibilitychange', function () {
+  if (!curId) return;
+  if (document.hidden) {
+    if (_syncPaused) return;
+    _syncPaused = true;
+    // 停合并拉取（提示 / 地图在线玩家 / 好友红点）—— 这些东西玩家在后台看不到
+    if (window._syncTimers && window._syncTimers.sync) {
+      clearInterval(window._syncTimers.sync);
+      window._syncTimers.sync = null;
+    }
+    // 私聊轮询也停（不需要在后台每 3 秒拉聊天记录）
+    if (window._chatPollInterval) {
+      clearInterval(window._chatPollInterval);
+      window._chatPollInterval = null;
+    }
+  } else {
+    if (!_syncPaused) return;
+    _syncPaused = false;
+    // 回前台：立刻刷新一次，再把合并轮询接回去
+    if (window._syncTimers && !window._syncTimers.sync) {
+      syncTick();
+      window._syncTimers.sync = setInterval(syncTick, SYNC_INTERVAL.sync);
+    }
+    if (typeof startChatPolling === 'function') startChatPolling();
+  }
+});
+
 
 
 // 心跳（保活 + 让服务器知道自己在线 + 顺便同步自己的最新数据）
@@ -4206,11 +4272,12 @@ async function heartbeat() {
 
 // 刷新在线玩家分布（更新地图圆点）
 
-async function refreshOnlineMap() {
+async function refreshOnlineMap(prefetched) {
 
   if (!curId) return;
 
-  const res = await api('/api/places');
+  // prefetched：syncTick() 合并请求时传入；不传就自己发请求（单独调用行为不变）
+  const res = prefetched || await api('/api/places');
 
   if (res.ok && res.places) {
 
@@ -4246,11 +4313,12 @@ let _firstBadgeLoad = true;
 
 let _modalShowingIncoming = false;  // 防重复弹窗
 
-async function pullFriendRequestBadge() {
+async function pullFriendRequestBadge(prefetched) {
 
   if (!curId) return;
 
-  const res = await api('/api/friendRequests?id=' + encodeURIComponent(curId));
+  // prefetched：syncTick() 合并请求时传入；不传就自己发请求（单独调用行为不变）
+  const res = prefetched || await api('/api/friendRequests?id=' + encodeURIComponent(curId));
 
   const incoming = (res.ok && res.incoming) ? res.incoming : [];
 
@@ -4377,17 +4445,18 @@ const _TIP_TYPE_RANK = { gift: 0, chat: 0, announce: 1, system: 2 };
 
 
 
-async function pullSysTips() {
+async function pullSysTips(prefetched) {
 
   if (!curId) return;
 
+  // prefetched：syncTick() 合并请求时传入；不传就自己发请求（单独调用行为不变）
   const url = _sysTipsFirstLoad
 
     ? `/api/sysTips?id=${encodeURIComponent(curId)}`
 
     : `/api/sysTips?id=${encodeURIComponent(curId)}&since=${_lastSysTipTs}`;
 
-  const res = await api(url);
+  const res = prefetched || await api(url);
 
   if (!res.ok || !res.tips) {
 
@@ -4597,6 +4666,9 @@ function logout() {
   // 五子棋：清理图层 + 停止轮询，避免登出后残留
 
   if (typeof window._gmkCleanup === 'function') { try { window._gmkCleanup(); } catch (e) {} }
+
+  // 停掉全部同步轮询（心跳 / 提示 / 地图 / 好友红点 / 私聊），避免登出后还在空转烧配额
+  try { stopSyncTimers(); } catch (e) {}
 
   // 通知后端：清位置 + 强制离线
 
