@@ -103,11 +103,14 @@ html, body {
 
 
 
-.input-wrap { margin-top:7vh; width:58vw; max-width:280px;
+.input-wrap { margin-top:1.6vh; width:58vw; max-width:280px;
 
   background:rgba(255,255,255,.95); border:3px solid #e8e8e8; border-radius:999px;
 
   padding:2.8vw 4vw; box-shadow:0 6px 22px rgba(0,0,0,.6); }
+
+/* 第一个输入框（ID）离标题远一点；后面的（口令）跟它挨近 */
+.start-title + .input-wrap { margin-top:7vh; }
 
 .input-wrap input { width:100%; border:none; outline:none; background:transparent;
 
@@ -897,7 +900,9 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 
     <div class="start-title glitch" data-t="· 验证身份 ·">· 验证身份 ·</div>
 
-    <div class="input-wrap"><input id="pid" type="text" inputmode="numeric" maxlength="5" autocomplete="off"></div>
+    <div class="input-wrap"><input id="pid" type="text" maxlength="5" autocomplete="off" placeholder="玩家 ID"></div>
+
+    <div class="input-wrap"><input id="pin" type="text" maxlength="10" autocomplete="off" placeholder="认证口令（中文/数字，最多 10 字）" onkeydown="if(event.key==='Enter'){verify();}"></div>
 
     <button class="big-btn" onclick="verify()">进 入</button>
 
@@ -979,10 +984,18 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
      中层：hall_map_overlay.png（object-fit:fill 自动拉伸对齐，不会错位）
      注意：尺寸不一致只警告、不阻止加载（以前会拒绝，导致没图可用时地图全空） */
   var BG = ["hall_map.webp", "hall_map.gif"];
+  // ★ 后台「数据」页可以关闭"动态地图"：关闭后不再探测/加载动图，直接用静态 hall_map.png。
+  //   只换"最底层那张图"，上层 hall_map_overlay.png、玩家圆点、宝箱、雷区全都不动，
+  //   所以商人 / 雷区 / 宝箱等功能完全不受影响。
+  function allowedBG(){
+    var cfg = (typeof GAME_CONFIG !== "undefined" && GAME_CONFIG) ? GAME_CONFIG : {};
+    return (cfg.dynamic_map_enabled === false) ? [] : BG;
+  }
   function run(){
     var bg = document.getElementById("mapBgLayer");
     if (!bg) return;
     var ov = document.getElementById("mapOverlayLayer");
+    var LIST = allowedBG();
     // 底层图加载失败 → 给个深色底，至少不显示破图
     bg.onerror = function(){
       bg.style.background = "linear-gradient(160deg,#1a1410,#0d0a08)";
@@ -1000,40 +1013,51 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
           "\n  文字层会被自动拉伸对齐（object-fit:fill），但建议两张图做成同尺寸以防元素比例失真。");
       }
     }
+    if (!LIST.length) {
+      // 动态地图已关闭 → 底层固定用静态 hall_map.png（玩家/宝箱/雷区/文字层都不动）
+      bg.src = "hall_map.png";
+      bg.style.background = "";
+      bg.style.minHeight = "";
+      console.log("[map] 动态地图已关闭，底层使用 hall_map.png");
+      if (ov && ov.complete && ov.naturalWidth === 0) ov.style.display = "none";
+      return;
+    }
     (function next(i){
-      if (i >= BG.length) {
+      if (i >= LIST.length) {
         // 动图都没有 → 检查底层 PNG 是否可用
         if (bg.complete && bg.naturalWidth === 0) bg.onerror();
         return;
       }
       var probe = new Image();
       probe.onload = function(){
-        check(probe.naturalWidth, probe.naturalHeight, BG[i]);
+        check(probe.naturalWidth, probe.naturalHeight, LIST[i]);
         bg.style.background = "";      // 清掉兜底底色
         bg.style.minHeight = "";
         bg.onerror = null;             // 换上新图后不再需要兜底
-        bg.src = BG[i];
-        console.log("[map] 底层动图已启用：" + BG[i] + "  " + probe.naturalWidth + "x" + probe.naturalHeight);
+        bg.src = LIST[i];
+        console.log("[map] 底层动图已启用：" + LIST[i] + "  " + probe.naturalWidth + "x" + probe.naturalHeight);
       };
       probe.onerror = function(){ next(i + 1); };
-      probe.src = BG[i];
+      probe.src = LIST[i];
     })(0);
     // 中层加载失败 → 隐藏，不显示破图
     if (ov && ov.complete && ov.naturalWidth === 0) ov.style.display = "none";
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
   else run();
+  // 暴露出去：拿到后台配置后（loadGameConfig）要按开关再跑一次
+  window._applyMapBg = run;
 })();</script>
 
   </div>
 
   <div class="tab-bar">
 
-    <div class="tab active" data-tab="profile" onclick="switchTab('profile')">个人信息</div>
+    <div class="tab active" data-tab="profile" onclick="switchTab('profile')">【信息】</div>
 
-    <div class="tab" data-tab="posts" onclick="switchTab('posts')">世界频道</div>
+    <div class="tab" data-tab="inventory" onclick="switchTab('inventory')">【背包】</div>
 
-    <div class="tab" data-tab="shop" onclick="switchTab('shop')">特殊商场</div>
+    <div class="tab" data-tab="shop" onclick="switchTab('shop')">【商城】</div>
 
     
 
@@ -1058,6 +1082,11 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
           <div class="player-id-row"><span id="playerId">--</span><img class="hide-id-icon" src="icon_hide_id.png" onclick="toggleDmVisibility()" title="点击切换隐藏/显示"></div>
 
           <div id="playerTitlesRow" style="display:flex;flex-wrap:wrap;gap:1vw;margin-top:1vw;width:100%;"></div>
+
+          <!-- 签到小按钮：放在「账号」和「骰子」之间，金色小药丸，风格和称号一致 -->
+          <div style="display:flex;justify-content:center;margin-top:1.2vw;">
+            <button onclick="dailyCheckin()" title="签到打卡" style="padding:.35vw 2.2vw;border-radius:999px;border:1px solid rgba(255,215,0,.8);background:linear-gradient(180deg,#ffd700,#c8a300);color:#4a3200;font-size:2vw;font-weight:800;line-height:1.6;cursor:pointer;box-shadow:0 0 10px rgba(255,215,0,.55), inset 0 1px 0 rgba(255,255,255,.5);white-space:nowrap;transition:transform .12s,box-shadow .12s;">签到</button>
+          </div>
 
           <button class="dice-btn-avatar" onclick="toggleDiceMenu()" title="摇骰子"><img src="btn_dice.png"></button>
 
@@ -1095,11 +1124,9 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
       
 
       <div class="profile-bottom">
-<button class="action-btn gold" onclick="showInventory()"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【装备物品】</span></button>
-<button class="action-btn gold" onclick="showSkills()"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【修行灵力】</span></button>
+<button class="action-btn gold" onclick="switchTab('posts')"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【世界频道】</span></button>
 <button class="action-btn gold" onclick="switchTab('friends')"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【好友系统】</span></button>
 <button class="action-btn red" onclick="showEntertainment()"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【娱乐模式】</span></button>
-<button class="action-btn red" onclick="dailyCheckin()"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【签到打卡】</span></button>
 <button class="action-btn red" onclick="switchTab('announce')"><img class="btn-bg-img" src="btn_bg.png"><span class="btn-text">【官方公告】</span></button>
 </div>
 
@@ -1166,6 +1193,8 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
       <div class="dash"></div>
 
       <div class="chg" style="display:none;"><!-- 关键修复：删除"更换DM"功能，统一由 admin 后台控制玩家 ID/UID——避免玩家改 ID 时触发旧的 syncOps TDZ / 关联表同步失败 bug --><label>更换DM</label><input class="mini-input" id="newId" placeholder="≤5位+含英文" maxlength="5"><button class="mini-btn" onclick="changeId()"><img src="btn_confirm.png"><span>确认</span></button></div>
+
+      <div class="chg"><label>登录口令</label><input class="mini-input" id="newPin" placeholder="中文/数字，最多10字" maxlength="10" autocomplete="off"><button class="mini-btn" onclick="changePin()"><img src="btn_confirm.png"><span>确认</span></button></div>
 
       <div class="chg"><label>更换头像</label><input class="mini-input" id="avatarName" placeholder="选择图片" readonly onclick="document.getElementById('avatarFile').click()"><button class="mini-btn" onclick="changeAvatar()"><img src="btn_confirm.png"><span>确认</span></button></div>
 
@@ -1316,11 +1345,40 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 .inv-name { width:100%; font-size:2.05vw; font-weight:bold; color:#fff; text-align:center;
   line-height:1.2; height:2.6vw; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .inv-foot { width:100%; display:flex; align-items:center; justify-content:space-between; gap:.8vw; }
-.inv-cat { font-size:1.55vw; padding:.1vw .9vw; border-radius:99px; white-space:nowrap; flex-shrink:0; }
-.inv-qty { font-size:1.85vw; font-weight:bold; color:#ffd700; white-space:nowrap; text-shadow:0 0 6px rgba(255,215,0,.4); }
+/* 分类标签：立体胶囊 + 同色微光（颜色由卡片按分类内联注入） */
+.inv-cat { font-size:1.6vw; font-weight:800; letter-spacing:.03em;
+  padding:.42vw 1.15vw; border-radius:99px; white-space:nowrap; flex-shrink:0;
+  box-shadow:0 1px 4px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.22);
+  text-shadow:0 0 7px currentColor; }
+/* 数量：右下角金色小徽章（原来是裸文字，看不清也不好看） */
+.inv-qty { font-size:1.8vw; font-weight:800; color:#ffd700; white-space:nowrap;
+  padding:.42vw 1vw; border-radius:99px;
+  background:linear-gradient(180deg, rgba(0,0,0,.52), rgba(0,0,0,.26));
+  border:1px solid rgba(255,215,0,.38);
+  box-shadow:0 1px 4px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.14);
+  text-shadow:0 0 8px rgba(255,215,0,.6); }
 
 /* ---- ② 道具详情弹窗按钮 ---- */
 .item-sheet-head { display:flex; align-items:center; gap:3vw; margin-bottom:2.5vw; }
+
+/* 物品详情的关闭按钮：固定圆形 ✕，永远在右上角、位置不随"使用/赠送"按钮数量变化 */
+.item-sheet-close {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 9vw; height: 9vw;
+  max-width: 38px; max-height: 38px;
+  min-width: 30px; min-height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: 4.4vw;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.item-sheet-close:active { transform: scale(.9); background: rgba(0,0,0,.8); }
 .item-sheet-thumb { width:17vw; height:17vw; max-width:88px; max-height:88px; flex-shrink:0;
   display:flex; align-items:center; justify-content:center; border-radius:14px;
   background:radial-gradient(circle at 50% 35%, rgba(255,255,255,.15), rgba(0,0,0,.35));
@@ -1330,6 +1388,106 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 .item-sheet-ops button { padding:1.9vw 0; border-radius:9px; font-size:2.9vw; font-weight:bold;
   border:0; cursor:pointer; color:#fff; line-height:1.25; transition:transform .12s, filter .12s; }
 .item-sheet-ops button:active { transform:scale(.95); filter:brightness(1.15); }
+
+/* ---- ②b 道具详情：分类色 hero 头（颜色由 gmkItemSheet 按分类内联注入） ---- */
+.item-sheet-hero {
+  position:relative; display:flex; align-items:center; gap:3vw;
+  border-radius:14px; padding:3vw 2.6vw; margin-bottom:2.4vw; overflow:hidden;
+  border:1px solid rgba(255,255,255,.14);
+}
+/* 左上角一抹高光，让色块不死板 */
+.item-sheet-hero::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 95% at 8% -10%, rgba(255,255,255,.20), transparent 62%);
+}
+.item-sheet-hero > * { position:relative; z-index:1; }
+.item-sheet-pill {
+  display:inline-flex; align-items:center; gap:.6vw;
+  font-size:2.4vw; font-weight:800; letter-spacing:.03em;
+  padding:.5vw 1.4vw; border-radius:99px;
+  box-shadow:0 1px 5px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.24);
+  text-shadow:0 0 8px currentColor;
+}
+.item-sheet-qty {
+  display:inline-flex; align-items:center;
+  font-size:2.6vw; font-weight:800; color:#ffd700;
+  padding:.5vw 1.4vw; border-radius:99px;
+  background:linear-gradient(180deg, rgba(0,0,0,.52), rgba(0,0,0,.26));
+  border:1px solid rgba(255,215,0,.42);
+  box-shadow:0 1px 5px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.14);
+  text-shadow:0 0 8px rgba(255,215,0,.55);
+}
+/* ★ 信息页底部四个按钮排成一排（世界频道 / 好友系统 / 娱乐模式 / 官方公告） */
+#content-profile .profile-bottom { display:grid !important; grid-template-columns:repeat(4, minmax(0,1fr)) !important; gap:1.4vw !important; }
+
+/* ════════════════════════════════════════════════════════════
+   修行灵力（内嵌在信息页）—— 统一成"技能升级弹窗"那套深金玻璃风格
+   深色渐变底 + 金色细描边 + 金色胶囊按钮，和弹窗视觉完全一致
+   （用 !important 是因为这些元素原本都带内联 style，必须靠 !important 压过去）
+   ════════════════════════════════════════════════════════════ */
+#inlineSkillsHost { margin-top:3.5vw; }
+
+/* 分组外框 */
+#inlineSkillsHost .collapse-wrap {
+  background:linear-gradient(168deg, rgba(34,28,18,.94) 0%, rgba(16,12,7,.97) 100%) !important;
+  border:1px solid rgba(255,215,0,.30) !important;
+  border-radius:14px !important;
+  box-shadow:0 8px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06) !important;
+  padding:0 !important;
+  overflow:hidden;
+}
+/* 分组标题条：金色渐变条 */
+#inlineSkillsHost .collapse-head {
+  background:linear-gradient(180deg, rgba(255,215,0,.16) 0%, rgba(255,215,0,.02) 100%) !important;
+  padding:2.4vw 3vw !important;
+  border-bottom:1px solid rgba(255,215,0,.18);
+  letter-spacing:.02em;
+  text-shadow:0 0 12px rgba(255,215,0,.4);
+}
+#inlineSkillsHost .collapse-arrow { color:rgba(255,215,0,.9) !important; }
+/* 分组内容区 */
+#inlineSkillsHost .collapse-body { padding:2.6vw 2.8vw 3vw !important; }
+/* 每个技能卡片留出间距，不要挤在一起 */
+#inlineSkillsHost .collapse-body div[style*="rgba(255,255,255,.05)"] {
+  background:linear-gradient(168deg, rgba(255,255,255,.055) 0%, rgba(0,0,0,.20) 100%) !important;
+  border:1px solid rgba(255,255,255,.10) !important;
+  border-radius:11px !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  margin-bottom:2vw !important;
+  padding:2.2vw 2.4vw !important;
+}
+/* ★ 按钮改成「世界频道」那种款式：红渐变 + 10px 圆角 + 白色粗字（不是金色胶囊） */
+#inlineSkillsHost button {
+  background:linear-gradient(180deg,#ef2b3a,#b8121f) !important;
+  border:0 !important;
+  color:#fff !important;
+  font-weight:bold !important;
+  border-radius:10px !important;
+  padding:1.5vw 3.4vw !important;
+  font-size:2.5vw !important;
+  line-height:1.35 !important;
+  box-shadow:0 2px 9px rgba(180,10,25,.35) !important;
+  text-shadow:none !important;
+  transition:transform .12s, filter .12s;
+}
+#inlineSkillsHost button:active { transform:scale(.95) !important; filter:brightness(1.12) !important; }
+#inlineSkillsHost button[disabled] {
+  background:rgba(255,255,255,.10) !important;
+  color:rgba(255,255,255,.32) !important;
+  box-shadow:none !important;
+  cursor:not-allowed;
+}
+/* 内嵌了就不需要"返回"按钮 */
+#inlineSkillsHost .back-btn { display:none !important; }
+/* 分页条也统一成世界频道款式，小一号 */
+#inlineSkillsHost .pager-bar button { padding:1vw 2.8vw !important; font-size:2.3vw !important; }
+
+/* 描述和效果所在的正文块：加一层浅浅的玻璃底，避免文字直接贴在弹窗背景上 */
+.item-sheet-body {
+  border-radius:12px; padding:2.4vw 2.6vw;
+  background:linear-gradient(168deg, rgba(255,255,255,.055), rgba(255,255,255,.015) 60%, rgba(0,0,0,.18));
+  border:1px solid rgba(255,255,255,.09);
+}
 
 /* ---- ③ 五子棋用卡悬浮窗 ---- */
 #gmkCardPop { position:fixed; left:50%; top:22vh; transform:translate(-50%,0) scale(.85);
@@ -2421,6 +2579,15 @@ div:has(> #invSearchInput), div:has(> #shopSearchInput) {
 /* 收藏星 / 放大镜：更亮一点 */
 .shop-item .shop-fav-btn, .shop-item .shop-desc-btn { filter:drop-shadow(0 1px 3px rgba(0,0,0,.7)); }
 
+/* ★ 特殊商场：卡片按分类上色，和背包用同一套配色（金=绑定 / 紫=特殊 / 蓝=物品 / 粉=宠物 / 绿=材料）
+   注意：上面 .shop-item 的 background/border 带了 !important，所以这里也必须用 !important 才能覆盖，
+   并且必须写在它【之后】（靠源码顺序取胜）。 */
+.shop-item.cat-bind     { background:linear-gradient(168deg, rgba(255,215,0,.22) 0%, rgba(255,215,0,.055) 55%, rgba(0,0,0,.34) 100%) !important; border-color:rgba(255,215,0,.50) !important; }
+.shop-item.cat-special  { background:linear-gradient(168deg, rgba(192,132,252,.22) 0%, rgba(192,132,252,.055) 55%, rgba(0,0,0,.34) 100%) !important; border-color:rgba(192,132,252,.50) !important; }
+.shop-item.cat-item     { background:linear-gradient(168deg, rgba(77,140,255,.22) 0%, rgba(77,140,255,.055) 55%, rgba(0,0,0,.34) 100%) !important; border-color:rgba(77,140,255,.50) !important; }
+.shop-item.cat-pet      { background:linear-gradient(168deg, rgba(255,122,184,.22) 0%, rgba(255,122,184,.055) 55%, rgba(0,0,0,.34) 100%) !important; border-color:rgba(255,122,184,.50) !important; }
+.shop-item.cat-material { background:linear-gradient(168deg, rgba(46,232,78,.20) 0%, rgba(46,232,78,.05) 55%, rgba(0,0,0,.34) 100%) !important; border-color:rgba(46,232,78,.48) !important; }
+
 @media (prefers-reduced-motion: reduce) { .shop-item::after { animation:none !important; display:none; } }
 
 /* ══════════════════════════════════════════════
@@ -3025,8 +3192,10 @@ div:has(> #annSearchInput) {
   overflow:hidden;
   animation:diceMenuIn .24s cubic-bezier(.22,1,.36,1);
 }
+/* ★ 只保留这一个 keyframe。原来下面还有一条重复定义，它的 from/to 写的是 translateX(-50%)
+   而不是 translate(-50%,-50%)，把垂直居中丢了 —— 动画过程中面板位置偏低，动画结束时
+   被 !important 的 transform 拉回中心，就会看到"往上闪一下"。重复的那条已删除。 */
 @keyframes diceMenuIn { from { opacity:0; transform:translate(-50%,-50%) translateY(14px) scale(.94); } to { opacity:1; transform:translate(-50%,-50%) translateY(0) scale(1); } }
-@keyframes diceMenuIn { from { opacity:0; transform:translateX(-50%) translateY(14px) scale(.94); } to { opacity:1; transform:translateX(-50%) translateY(0) scale(1); } }
 /* 顶部金线 + 两侧角标 */
 .dice-menu::before {
   content:''; position:absolute; top:0; left:10%; right:10%; height:1px;
@@ -3686,6 +3855,25 @@ function toast(msg, type='ok', duration = 2000) {
 
 
 
+// 会话令牌的内存副本：某些浏览器隐私模式 / 存储被禁用时 localStorage 会抛异常，
+//   只用 localStorage 会导致"登录成功但后续全 401"，所以内存里也留一份兜底。
+let _memToken = '';
+let _lastKickAt = 0;   // 上次"踢回登录页"的时间（3 秒内只踢一次，防连弹）
+let _loginAt = 0;      // 最近一次登录成功的时间（用于"刚登录别踢人"的过渡期保护）
+
+// 把会话令牌拼到 URL 上。
+//   为什么不用自定义请求头 X-Session-Token：
+//   ① 这个网关（和后台的 admin_pass 一样）会拦自定义请求头 → 后端拿不到令牌 → 一直 401
+//   ② 自定义头会让每个请求都多一次 CORS 预检 OPTIONS → 云函数调用次数直接翻倍
+function _apiUrlWithToken(path) {
+  try {
+    let tk = _memToken;
+    if (!tk) { try { tk = localStorage.getItem('hundun_token') || ''; } catch (e) { } }
+    if (!tk) return path;
+    return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(tk);
+  } catch (e) { return path; }
+}
+
 async function api(path, body) {
 
   const opts = { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' } };
@@ -3694,7 +3882,7 @@ async function api(path, body) {
 
   try {
 
-    const res = await fetch(API_BASE + path, opts);
+    const res = await fetch(API_BASE + _apiUrlWithToken(path), opts);
 
     const data = await res.json().catch(() => ({}));
 
@@ -3707,6 +3895,21 @@ async function api(path, body) {
       // 优先提取 CloudBase 错误消息（data.message），其次 data.error，最后 HTTP 状态
 
       const errMsg = data.message || data.error || `HTTP ${res.status}`;
+
+      // 令牌失效（过期 / 被清 / 换了设备）→ 清令牌并踢回登录页，
+      //   不然玩家会卡在半登录状态，点什么都是"登录已过期"
+      if (res.status === 401 && data && data.needLogin) {
+        // 刚登录 15 秒内就 401：大概率是"云函数刚更新、旧实例还在服务"的过渡期现象。
+        //   这时候踢人体验很怪（玩家明明刚输对账号口令），所以先不踢、只记日志，
+        //   下一轮轮询打到新实例就自动恢复；真的是令牌坏了，15 秒后照样会被正常踢出。
+        if (Date.now() - _loginAt < 15000) {
+          console.warn('[auth] 登录后立刻 401（可能是旧实例），本次不踢人，reason =', data.reason || '');
+          return { error: errMsg, status: res.status, code: data.code };
+        }
+        // 把后端给的 reason 一起显示出来，出问题时一眼就知道卡在哪一环
+        forceBackToLogin('登录已过期，请重新登录' + (data.reason ? '（' + data.reason + '）' : ''));
+        return { error: errMsg, status: res.status, code: data.code };
+      }
 
       // 把余额不足/服务不可用 这种后端服务问题直接展示，避免误以为是网络错误
 
@@ -3941,6 +4144,11 @@ function playSound() {
 // 设计：复用现有轮询里的所有拉取函数；同时强制重渲染当前 tab 数据
 
 async function refreshAll() {
+  // ★ 防连点：2.5 秒内重复点击直接忽略，避免一次点好几下就发好几轮请求
+  //   （一轮刷新本身就要打 4~8 个接口，连点很费云函数调用）
+  const _nowR = Date.now();
+  if (window._refreshAt && _nowR - window._refreshAt < 2500) return;
+  window._refreshAt = _nowR;
 
   if (!curId) return;
 
@@ -3958,9 +4166,11 @@ async function refreshAll() {
 
   // 2. 并行拉所有"每 3~5 秒轮询"的数据源
 
+  const _hb = heartbeat();
+
   const jobs = [
 
-    heartbeat(),
+    _hb,
 
     pullSysTips(),
 
@@ -3974,7 +4184,12 @@ async function refreshAll() {
 
   try {
 
-    if (curTab === 'profile') jobs.push(loadMap());
+    // ★ 补上 renderPlayer()：以前点刷新只拉地图和技能，玩家自己的数值（等级/蓝条/玄币/称号）
+    //   不会重绘 —— 后台改了等级后点刷新看不到变化，就是这个原因
+    // ★ 修行灵力现在内嵌在信息页底部，只在「第一次」进入信息页时渲染一次。
+  //   原来每次从背包/商城切回信息都会重拉 3 个接口（sectSkills + inventory + sidejobSkills），
+  //   是云函数调用的大头。需要更新时：点右上角刷新按钮，或学/升级/修炼后会自动重拉。
+  if (curTab === 'profile') { jobs.push(loadMap()); if (typeof renderPlayer === 'function') jobs.push(_hb.then(() => renderPlayer())); if (typeof showSkills === 'function') jobs.push(showSkills()); }
 
     else if (curTab === 'posts') jobs.push(loadPosts());
 
@@ -4034,20 +4249,74 @@ async function verify() {
 
   const id = $("pid").value.trim();
 
+  const pin = String(($("pin") || {}).value || '').trim();
+
   if (!id) { $("hint").textContent = "提示：请输入玩家ID"; return; }
 
   $("hint").textContent = "验证中...";
 
-  const res = await api('/api/login', { id });
+  const res = await api('/api/login', { id, pin });
 
   if (res.error) { $("hint").textContent = "提示：" + res.error; return; }
+
+  // 存会话令牌（之后每个请求都会带上它）
+  try { if (res.token) localStorage.setItem('hundun_token', res.token); } catch (e) {}
+  _memToken = res.token || '';
 
   curId = id;
 
   curPlayer = res.player;
 
+  _loginAt = Date.now();   // 记下登录时间（用于"刚登录别踢人"的保护）
+
   enterHall();
 
+  // 还没设过口令（新号 / 后台清了口令）→ 强制设置，设完才能正常玩
+  if (res.need_pin) { setTimeout(function () { forceSetPin(); }, 400); }
+
+}
+
+// 令牌失效 → 踢回启动页（停掉轮询、清掉弹窗），避免玩家卡在半登录状态一直报错
+//   注：_lastKickAt / _loginAt 的声明放在 api() 之前（见 _memToken 附近），避免"用早于声明"的时序问题
+function forceBackToLogin(msg) {
+  const _now = Date.now();
+  if (_now - _lastKickAt < 3000) return;   // 3 秒内只踢一次，避免几个请求同时 401 时连弹一串提示
+  _lastKickAt = _now;
+  try { localStorage.removeItem('hundun_token'); } catch (e) {}
+  _memToken = '';
+  try { if (typeof stopSyncTimers === 'function') stopSyncTimers(); } catch (e) {}
+  try { if (typeof clearModalQueue === 'function') clearModalQueue(); } catch (e) {}
+  try { closeModal(); } catch (e) {}
+  curId = '';
+  // ★ 不要清空 curPlayer：此刻可能还有请求在返回途中，回调里会读 curPlayer.place_id，
+  //   清成 null 就会抛 "Cannot read properties of null (reading 'place_id')" 把页面搞挂。
+  //   下次登录时 verify() 会重新赋值，留着旧值没有危害。
+  const hall = $('hallPage'); if (hall) hall.style.display = 'none';
+  const start = $('startPage'); if (start) start.style.display = 'flex';
+  try { toast(msg || '登录已过期，请重新登录', 'err', 3000); } catch (e) {}
+}
+
+// 强制设置认证口令（首次登录、或被后台清除口令后）
+function forceSetPin() {
+  showModal('🔐 设置认证口令', `
+    <div style="font-size:3vw;color:rgba(255,255,255,.65);line-height:1.7;margin-bottom:2.5vw;">
+      为保护你的账号，请先设置一个<b style="color:#ffd700;">认证口令</b>。<br>
+      之后每次登录都要输入它。<b>中文、数字、字母都行，最多 10 个字。</b><br>
+      忘了就找主持人重置。
+    </div>
+    <div class="form-row full"><div><label>认证口令（必填）</label><input id="setPin1" type="text" maxlength="10" autocomplete="off"></div></div>
+    <div class="form-row full"><div><label>再输一次确认</label><input id="setPin2" type="text" maxlength="10" autocomplete="off"></div></div>
+  `, async () => {
+    const p1 = String(($('setPin1') || {}).value || '').trim();
+    const p2 = String(($('setPin2') || {}).value || '').trim();
+    if (!p1) return toast('请输入认证口令', 'err');
+    if (Array.from(p1).length > 10) return toast('口令最多 10 个字', 'err');
+    if (p1 !== p2) return toast('两次输入不一致', 'err');
+    const r = await api('/api/setPin', { dm: curId, pin: p1 });
+    if (r.error) return toast(r.error, 'err');
+    toast('✅ 认证口令已设置，下次登录请用它', 'ok', 2200);
+    closeModal();
+  }, '保存口令', null, false, null, true);   // 最后一个 true = 隐藏"取消"，强制设置
 }
 
 
@@ -4069,6 +4338,10 @@ function enterHall() {
   renderPlayer();
 
   loadMap();
+
+  // ★ 修行灵力内嵌在信息页底部：进大厅就必须渲染一次，
+  //   否则要切到别的页签再切回来才会出现（之前就是这个原因看不到）
+  try { if (typeof showSkills === 'function') showSkills(); } catch (e) { }
 
   loadGameConfig();  // 拉数据设置（首次切到世界频道/商场/公告前决定是否拦截）
 
@@ -4150,7 +4423,10 @@ function enterHall() {
 // 回到前台再整体重启，每个接口会立刻拉一次，所以不会有"数据陈旧"的感觉。
 const SYNC_INTERVAL = {
   heartbeat: 15000,   // 心跳：15 秒（保活 + 驱动各种懒结算，不能再低了）
-  sync: 15000,        // 合并拉取：一次请求同时拿「全服提示 + 地图在线玩家 + 好友红点」
+  // 合并拉取（系统提示 + 在线地图 + 好友申请红点）：15 秒
+  //   ★ 想要"别人加你几秒内就收到"，把这里改成 5000 即可 —— 但调用量会翻倍（4 → 12 次/分钟）。
+  //   这是纯云函数架构的硬限制：没有长连接，服务器无法主动推送，只能靠客户端轮询。
+  sync: 15000,
 };
 let _syncPaused = false;
 
@@ -4662,6 +4938,10 @@ function backOrLogout() {
 function logout() {
 
   if (!confirm('确认退出登录？')) return;
+
+  // 清掉本地会话令牌（下次必须重新输入 ID + 认证口令）
+  try { localStorage.removeItem('hundun_token'); } catch (e) {}
+  _memToken = '';
 
   // 五子棋：清理图层 + 停止轮询，避免登出后残留
 
@@ -6305,6 +6585,7 @@ async function doTravel(place, price) {
 
 function switchTab(tab) {
 if (tab === 'shop' && !requireHealth()) return;   // 特殊商城
+  if (tab === 'inventory' && !requireHealth()) return;   // 背包物品（健康为 0 不能开，和原来资料页「装备物品」一致）
 
   // 数据设置面板对世界频道 / 特殊商场 / 官方公告的关闭拦截
 
@@ -6354,9 +6635,11 @@ function switchTab(tab) {
 
   // 每次都重新加载（去掉 isSameTab 短路）
 
-  if (tab === 'profile') { renderPlayer(); if (!isSameTab) loadMap(); }
+  if (tab === 'profile') { renderPlayer(); if (!isSameTab) loadMap(); if (typeof showSkills === 'function' && !window._skillsRendered) showSkills(); }
 
   else if (tab === 'posts') loadPosts();
+
+  else if (tab === 'inventory') loadInventoryTab();
 
   else if (tab === 'shop') loadShop();
 
@@ -6367,6 +6650,48 @@ function switchTab(tab) {
 }
 
 
+
+// ★ 左右滑动切换底部三个页签（个人信息 / 背包物品 / 特殊商场）
+//   规则：
+//     · 位移太小（<60px）→ 当点击，不切
+//     · 偏竖直（竖向位移 > 横向的 75%）→ 当滚动列表，不切
+//     · 从屏幕最边缘起手（24px 内）→ 忽略，避免和手机系统的"返回手势"打架
+//     · 当前不在三个主页签上（比如世界频道、官方公告）→ 不切
+(function () {
+  var ORDER = ['profile', 'inventory', 'shop'];
+  var sx = 0, sy = 0, arming = false;
+  function onStart(e) {
+    if (!e.touches || e.touches.length !== 1) { arming = false; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; arming = true;
+  }
+  function onEnd(e) {
+    if (!arming) return;
+    arming = false;
+    var t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    var dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) < 60) return;
+    if (Math.abs(dy) > Math.abs(dx) * 0.75) return;
+    if (sx < 24 || sx > window.innerWidth - 24) return;
+    var cur = ORDER.indexOf(curTab);
+    if (cur < 0) {
+      // 世界频道 / 官方公告 这些是"资料页的子页"：右滑返回个人信息
+      if (dx > 0) switchTab('profile');
+      return;
+    }
+    var next = dx < 0 ? cur + 1 : cur - 1;
+    if (next < 0 || next >= ORDER.length) return;
+    switchTab(ORDER[next]);
+  }
+  function bind() {
+    var el = document.getElementById('infoPanel');
+    if (!el) return;
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchend', onEnd, { passive: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
 
 // ============ 世界频道 ============
 
@@ -7677,17 +8002,12 @@ async function loadShop() {
   // 折叠区配置（顺序：物品 → 特殊 → 绑定）
 
   const GROUP_CONF = [
-
-    { key: 'item',     cn: '🎁 普通物品类', color: '#2ee84e' },
-
-    { key: 'special',  cn: '✨ 特殊物品类', color: '#ffd700' },
-
-    { key: 'pet',      cn: '🐾 宠物类',     color: '#ff8c00' },
-
-    { key: 'material', cn: '🧪 材料类',     color: '#c084fc' },
-
-    { key: 'bind',     cn: '🔒 绑定物品类', color: '#888'    },
-
+    // ★ 顺序和配色与背包统一：金(绑定) → 紫(特殊) → 蓝(物品) → 粉(宠物) → 绿(材料)
+    { key: 'bind',     cn: '🔒 绑定物品类', color: '#ffd700' },
+    { key: 'special',  cn: '✨ 特殊物品类', color: '#c084fc' },
+    { key: 'item',     cn: '🎁 普通物品类', color: '#4d8cff' },
+    { key: 'pet',      cn: '🐾 宠物类',     color: '#ff7ab8' },
+    { key: 'material', cn: '🧪 材料类',     color: '#2ee84e' },
   ];
 
   let html = '';
@@ -7733,7 +8053,7 @@ async function loadShop() {
       // 序列化道具数据到 data-* 属性（描述按钮读取）
       const itemJson = encodeURIComponent(JSON.stringify({ id: it.id, name: it.name, desc: it.desc, icon: it.icon, price: it.price, category: it.category }));
 
-      return `<div class="shop-item" data-id="${escapeHtml(it.id)}" data-item='${itemJson}' style="${soldOut ? 'opacity:.5;pointer-events:none;' : ''}">
+      return `<div class="shop-item cat-${escapeHtml(it.category || 'item')}" data-id="${escapeHtml(it.id)}" data-item='${itemJson}' style="${soldOut ? 'opacity:.5;pointer-events:none;' : ''}">
 
         <div class="shop-fav-btn" data-action="fav" title="${isFav ? '取消收藏' : '收藏'}">${_favStarSvg(isFav)}</div>
 
@@ -7869,8 +8189,164 @@ async function loadAnnouncementDetail() {
   const res = await api('/api/announcement');
   const c = $("content-announce");
   window._annItems = (res.ok && res.announcements) ? res.announcements : [];
+  // ★ 跳转按钮跟着公告接口一起返回 —— 后台改完，玩家下次打开公告页就是最新的
+  if (res && res.links !== undefined) window._annLinks = String(res.links || '');
   if (window._annKw === undefined) window._annKw = '';
   gmkAnnRender();
+}
+
+// ★ 官方公告顶部的自定义跳转按钮（后台「官方公告」页配置，格式：按钮名称|网址）
+//   一行最多 4 个、自动换行；后台留空 → 返回空串，整栏不显示。
+function gmkAnnLinksHtml() {
+  var cfg = (typeof GAME_CONFIG !== 'undefined' && GAME_CONFIG) ? GAME_CONFIG : {};
+  // 优先用公告接口刚返回的最新值；没有就退回启动时缓存的配置
+  var raw = (window._annLinks !== undefined) ? String(window._annLinks || '') : String(cfg.announcement_links || '');
+  if (!raw.trim()) return '';
+  var items = [];
+  raw.split(/\r?\n/).forEach(function (line) {
+    var s = String(line || '').trim();
+    if (!s) return;
+    var i = s.indexOf('|');
+    if (i <= 0) return;
+    var name = s.slice(0, i).trim();
+    var target = s.slice(i + 1).trim();
+    if (!name || !target) return;
+    var isHttp = /^https?:\/\//i.test(target);
+    var looksImg = /\.(png|jpe?g|gif|webp|bmp)(\?[^#]*)?(#.*)?$/i.test(target);
+    if (isHttp) {
+      // http(s) 开头：看起来是图片 → 全屏看原图；否则当普通网址 → 新标签打开
+      items.push({ name: name, kind: looksImg ? 'img' : 'url', target: target });
+    } else if (looksImg && target.indexOf('..') < 0 && !/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+      // 项目目录里的本地图片（相对 index.html 的路径）→ 全屏看原图，可双指放大
+      items.push({ name: name, kind: 'img', target: target });
+    }
+    // 其它一律忽略（防止手滑写成 javascript: 之类）
+  });
+  if (!items.length) return '';
+  var out = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2vw;margin-bottom:2.5vw;">';
+  items.forEach(function (it) {
+    // 金色按钮（和游戏里「领取」那个 .claim-btn 同款配色）：金色渐变 + 黑字，比红色好看也更像"入口按钮"
+    var style = 'display:block;width:100%;padding:2.4vw 1vw;border-radius:10px;text-align:center;text-decoration:none;'
+      + 'background:linear-gradient(180deg,#ffd700,#c8a300);color:#3a2a00;font-size:2.9vw;font-weight:bold;'
+      + 'border:1px solid rgba(255,255,255,.35);box-shadow:0 2px 8px rgba(200,163,0,.45);'
+      + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;';
+    if (it.kind === 'url') {
+      out += '<a href="' + escapeHtml(it.target) + '" target="_blank" rel="noopener noreferrer" style="' + style + '">'
+        + escapeHtml(it.name) + '</a>';
+    } else {
+      out += '<button data-ann-img="' + escapeHtml(it.target) + '" onclick="openAnnImageViewer(this.dataset.annImg)" style="' + style + '">'
+        + escapeHtml(it.name) + '</button>';
+    }
+  });
+  out += '</div>';
+  return out;
+}
+
+// ★ 全屏看原图：双指缩放 / 单指拖动 / 双击放大 / 桌面滚轮缩放
+//   做成独立图层而不是直接放大页面，避免把整个游戏 UI 一起缩放搞乱。
+var _annIV = { scale: 1, tx: 0, ty: 0, sx: 0, sy: 0, d: 0, lastTap: 0, px: 0, py: 0, tx0: 0, ty0: 0 };
+function openAnnImageViewer(src) {
+  if (!src) return;
+  closeAnnImageViewer();
+  var box = document.createElement('div');
+  box.id = 'annImageViewer';
+  box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.97);display:flex;align-items:center;'
+    + 'justify-content:center;overflow:hidden;touch-action:none;';
+  box.innerHTML =
+    '<img id="annIVImg" src="' + escapeHtml(src) + '" alt="" draggable="false" '
+      + 'style="max-width:100%;max-height:100%;transform-origin:center center;will-change:transform;'
+      + 'user-select:none;-webkit-user-drag:none;">'
+    + '<button onclick="closeAnnImageViewer()" aria-label="关闭" style="position:absolute;top:3.5vw;right:3.5vw;'
+      + 'width:11vw;height:11vw;max-width:44px;max-height:44px;min-width:34px;min-height:34px;border-radius:50%;'
+      + 'border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.6);color:#fff;font-size:5vw;line-height:1;'
+      + 'display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</button>'
+    + '<div style="position:absolute;bottom:3vw;left:0;right:0;text-align:center;font-size:2.7vw;'
+      + 'color:rgba(255,255,255,.52);pointer-events:none;">双指捏合放大 · 放大后单指拖动 · 双击放大/复位</div>';
+  document.body.appendChild(box);
+  try { document.body.style.overflow = 'hidden'; } catch (e) { }
+  var img = box.querySelector('#annIVImg');
+  _annIV = { scale: 1, tx: 0, ty: 0, sx: 0, sy: 0, d: 0, lastTap: 0, px: 0, py: 0, tx0: 0, ty0: 0 };
+  function apply() {
+    img.style.transform = 'translate(' + _annIV.tx + 'px,' + _annIV.ty + 'px) scale(' + _annIV.scale + ')';
+  }
+  // ===== 交互 =====
+  // 用户实测反馈："拖动不了"。原来有三个问题，一起修了：
+  //   ① 没有 touchend 处理：双指缩放后抬起一根手指，剩下那根手指的拖动基准还是旧值（甚至是 0）
+  //      → 一拖就"跳"，看起来像拖不动
+  //   ② 完全没写鼠标事件 → 在电脑上验证时根本拖不了
+  //   ③ 1x 时禁止拖动是对的（图刚好铺满，没东西可拖），但没有任何提示，容易以为坏了
+  var startX = 0, startY = 0, baseX = 0, baseY = 0, pinchD = 0, pinchBase = 0, lastTap = 0;
+  var dragging = false;
+
+  function setScale(s) {
+    _annIV.scale = Math.min(6, Math.max(1, s));
+    if (_annIV.scale <= 1.001) { _annIV.scale = 1; _annIV.tx = 0; _annIV.ty = 0; }
+    apply();
+  }
+  function seed(x, y) { startX = x; startY = y; baseX = _annIV.tx; baseY = _annIV.ty; }
+  function panTo(x, y) {
+    _annIV.tx = baseX + (x - startX);
+    _annIV.ty = baseY + (y - startY);
+    apply();
+  }
+  function dist(t1, t2) { return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY); }
+
+  // ---- 触摸 ----
+  box.addEventListener('touchstart', function (e) {
+    if (e.touches.length >= 2) {
+      pinchD = dist(e.touches[0], e.touches[1]);
+      pinchBase = _annIV.scale;
+    } else if (e.touches.length === 1) {
+      seed(e.touches[0].clientX, e.touches[0].clientY);
+      var now = Date.now();
+      if (now - lastTap < 300) setScale(_annIV.scale > 1.2 ? 1 : 2.6);   // 双击放大/复位
+      lastTap = now;
+    }
+  }, { passive: true });
+
+  box.addEventListener('touchmove', function (e) {
+    if (e.touches.length >= 2 && pinchD) {
+      setScale(pinchBase * (dist(e.touches[0], e.touches[1]) / pinchD));
+      e.preventDefault();
+    } else if (e.touches.length === 1 && _annIV.scale > 1) {
+      panTo(e.touches[0].clientX, e.touches[0].clientY);
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  // ★ 关键修复：抬手时如果还剩一根手指，重新取基准 —— 否则接下来的单指拖动会"跳"
+  box.addEventListener('touchend', function (e) {
+    if (e.touches.length === 1) seed(e.touches[0].clientX, e.touches[0].clientY);
+    if (e.touches.length === 0) pinchD = 0;
+  }, { passive: true });
+  box.addEventListener('touchcancel', function () { pinchD = 0; }, { passive: true });
+
+  // ---- 鼠标（电脑上也能拖 / 缩放） ----
+  box.addEventListener('mousedown', function (e) {
+    if (e.target && e.target.tagName === 'BUTTON') return;
+    dragging = true; seed(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  box.addEventListener('mousemove', function (e) {
+    if (!dragging || _annIV.scale <= 1) return;
+    panTo(e.clientX, e.clientY);
+  });
+  box.addEventListener('mouseup', function () { dragging = false; });
+  box.addEventListener('mouseleave', function () { dragging = false; });
+  box.addEventListener('dblclick', function (e) {
+    if (e.target && e.target.tagName === 'BUTTON') return;
+    setScale(_annIV.scale > 1.2 ? 1 : 2.6);
+  });
+
+  box.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    setScale(_annIV.scale * (e.deltaY > 0 ? 0.9 : 1.1));
+  }, { passive: false });
+}
+function closeAnnImageViewer() {
+  var box = document.getElementById('annImageViewer');
+  if (box && box.parentNode) box.parentNode.removeChild(box);
+  try { document.body.style.overflow = ''; } catch (e) { }
 }
 
 // ★ 公告渲染：搜索 + 超长内容放大镜
@@ -7889,6 +8365,9 @@ window.gmkAnnRender = function () {
     + '<button onclick="gmkAnnSearch()" style="padding:2.4vw 4vw;border-radius:10px;border:0;background:linear-gradient(180deg,#ef2b3a,#b8121f);color:#fff;font-size:3.2vw;font-weight:bold;cursor:pointer;white-space:nowrap;">🔍 搜索</button>'
     + (kw ? '<button onclick="gmkAnnClear()" title="清空" style="padding:2.4vw 3vw;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:3.2vw;cursor:pointer;white-space:nowrap;">✕</button>' : '')
     + '</div>';
+
+  // ★ 后台自定义的跳转按钮（搜索栏下面一排，一行最多 4 个自动换行；后台没配置就不显示）
+  html += gmkAnnLinksHtml();
 
   if (!all.length) { c.innerHTML = html + '<div class="empty">暂无公告</div>'; return; }
 
@@ -8119,25 +8598,28 @@ function effectToTextClient(eff) {
 
 function renderItemCard(it) {
   const cat = it.category || "item";
-  // ★ 分类小标签（带底色）
-  const CAT_TAG = {
-    bind:     { t: "绑定", bg: "rgba(255,255,255,.16)", c: "#d0d0d0" },
-    item:     { t: "物品", bg: "rgba(46,232,78,.22)",   c: "#8effa8" },
-    special:  { t: "特殊", bg: "rgba(255,215,0,.22)",   c: "#ffd700" },
-    pet:      { t: "宠物", bg: "rgba(255,140,0,.22)",   c: "#ffb35c" },
-    material: { t: "材料", bg: "rgba(192,132,252,.22)", c: "#d8b4fe" },
+  // ★ 分类配色（按你的指定）：绑定=金色 / 特殊=紫色 / 物品=蓝色 / 宠物=粉色 / 材料=绿色
+  //   卡片背景用极低透明度的同色渐变，做到"隐隐约约有颜色"；边框亮一点，便于一眼区分
+  const CAT = {
+    bind:     { t: "绑定", rgb: "255,215,0"   },
+    special:  { t: "特殊", rgb: "192,132,252" },
+    item:     { t: "物品", rgb: "77,140,255"  },
+    pet:      { t: "宠物", rgb: "255,122,184" },
+    material: { t: "材料", rgb: "46,232,78"   },
   };
-  const _ct = CAT_TAG[cat] || CAT_TAG.item;
+  const _ct = CAT[cat] || CAT.item;
+  const rgb = _ct.rgb;
   const isImg = it.icon && typeof it.icon === "string" && it.icon.indexOf("data:image/") === 0;
   const iconHtml = isImg
     ? `<img src="${escapeHtml(it.icon)}" style="width:100%;height:100%;object-fit:contain;">`
     : `<span style="font-size:9vw;line-height:1;">${escapeHtml(it.icon || "🎁")}</span>`;
   const qty = parseInt(it.qty) || 0;
-  return `<div class="inv-card" onclick="gmkItemSheet('${escapeHtml(it.item_id)}')">
-    <div class="inv-thumb">${iconHtml}</div>
+  return `<div class="inv-card" onclick="gmkItemSheet('${escapeHtml(it.item_id)}')"
+    style="background:linear-gradient(180deg, rgba(${rgb},.24) 0%, rgba(${rgb},.07) 58%, rgba(0,0,0,.18) 100%);border:1px solid rgba(${rgb},.48);box-shadow:0 3px 13px rgba(${rgb},.15), inset 0 1px 0 rgba(255,255,255,.10);">
+    <div class="inv-thumb" style="background:radial-gradient(circle at 50% 32%, rgba(${rgb},.34), rgba(0,0,0,.42));border:1px solid rgba(${rgb},.38);box-shadow:0 0 12px rgba(${rgb},.20);">${iconHtml}</div>
     <div class="inv-name">${escapeHtml(it.name)}</div>
     <div class="inv-foot">
-      <span class="inv-cat" style="background:${_ct.bg};color:${_ct.c};">${_ct.t}</span>
+      <span class="inv-cat" style="background:rgba(${rgb},.24);color:rgb(${rgb});border:1px solid rgba(${rgb},.58);">${_ct.t}</span>
       <span class="inv-qty">x${qty}</span>
     </div>
   </div>`;
@@ -8154,15 +8636,20 @@ function renderItemCard(it) {
     return false;
   }
   window.requireHealth = requireHealth;
-async function showInventory() {
-  if (!requireHealth()) return;   // 装备物品
+// 背包页签的数据加载：由 switchTab 调用。
+//   ★ 注意：这个函数里不能再调 switchTab，否则 switchTab → loadInventoryTab → switchTab 会递归。
+async function loadInventoryTab() {
   const c = $("content-inventory");
-  c.innerHTML = '<div class="empty">加载中…</div>';
-  switchTab('inventory');
+  if (c) c.innerHTML = '<div class="empty">加载中…</div>';
   const res = await api('/api/inventory?id=' + encodeURIComponent(curId));
   window._invItems = (res.ok && res.items) ? res.items : [];
   if (window._invKw === undefined) window._invKw = '';
   gmkInvRender();
+}
+// 兼容旧调用方：现在背包是底部页签，这里只负责切过去（数据由 switchTab 里的 loadInventoryTab 拉）
+async function showInventory() {
+  if (!requireHealth()) return;
+  switchTab('inventory');
 }
 
 // ★ 背包渲染（平铺 + 分类彩色标签 + 关键词搜索）
@@ -8199,8 +8686,15 @@ window.gmkInvRender = function () {
     });
   }
   // 按分类归拢（同类相邻）
-  const _catIdx = { bind: 0, item: 1, special: 2, pet: 3, material: 4 };
-  list.sort(function (x2, y2) { return (_catIdx[x2.category || 'item'] || 1) - (_catIdx[y2.category || 'item'] || 1); });
+  //   排序：绑定(金) → 特殊(紫) → 物品(蓝) → 宠物(粉) → 材料(绿)
+  //   ★ 注意不能写 `_catIdx[...] || 1`：bind 的序号是 0，`0 || 1` 会被当成 1，
+  //     等于绑定类和物品类同级 —— 老代码就有这个隐藏 bug，这里一并修掉。
+  const _catIdx = { bind: 0, special: 1, item: 2, pet: 3, material: 4 };
+  const _catRank = function (x) {
+    const v = _catIdx[x.category || 'item'];
+    return (v === undefined) ? 2 : v;
+  };
+  list.sort(function (a, b) { return _catRank(a) - _catRank(b); });
 
   let html = searchBar;
   if (kw) {
@@ -8227,11 +8721,11 @@ window.gmkItemSheet = function (itemId) {
   if (!it) { toast("背包里没有此道具", "err", 2000); return; }
   const cat = it.category || "item";
   const CT = {
-    bind:     { t: "绑定", bg: "rgba(255,255,255,.16)", c: "#d0d0d0" },
-    item:     { t: "物品", bg: "rgba(46,232,78,.22)",   c: "#8effa8" },
-    special:  { t: "特殊", bg: "rgba(255,215,0,.22)",   c: "#ffd700" },
-    pet:      { t: "宠物", bg: "rgba(255,140,0,.22)",   c: "#ffb35c" },
-    material: { t: "材料", bg: "rgba(192,132,252,.22)", c: "#d8b4fe" },
+    bind:     { t: "绑定", bg: "rgba(255,215,0,.22)",   c: "#ffd700", rgb: "255,215,0"   },
+    item:     { t: "物品", bg: "rgba(77,140,255,.22)",  c: "#8fb8ff", rgb: "77,140,255"  },
+    special:  { t: "特殊", bg: "rgba(192,132,252,.22)", c: "#d8b4fe", rgb: "192,132,252" },
+    pet:      { t: "宠物", bg: "rgba(255,122,184,.22)", c: "#ffb3d4", rgb: "255,122,184" },
+    material: { t: "材料", bg: "rgba(46,232,78,.22)",   c: "#8effa8", rgb: "46,232,78"   },
   };
   const _ct = CT[cat] || CT.item;
   const isBind = cat === "bind";
@@ -8266,24 +8760,30 @@ window.gmkItemSheet = function (itemId) {
       ? `<button disabled style="background:rgba(255,255,255,.08);color:#777;">🔒 绑定道具不可赠送</button>`
       : `<button onclick="closeModal();giveItemToPlayer('${escapeHtml(it.item_id)}','${safeName}')" style="background:linear-gradient(180deg,#d4a017,#8a6a0d);">🎁 赠送</button>`);
   }
-  // ★ 关闭按钮：必须在本函数内、拼 body 之前 push（之前锚点匹配到了别的函数的 const body）
-  btns.push('<button onclick="closeModal()" style="background:linear-gradient(180deg,#3d3d3d,#1e1e1e);border:1px solid rgba(255,255,255,.16);">关闭</button>');
+  // ★ 关闭按钮不再放进按钮网格：按钮数量会变（有的道具没有"使用"/"赠送"），
+  //   放在网格里位置就会跟着变，容易点错。现在固定成右上角的圆形 ✕
+  //   （放在 hero 的最后，配合 flex:1 的中间块顶到最右，align-self 让它贴顶）
+  const _rgb = _ct.rgb || "77,140,255";
   const body = `
-    <div class="item-sheet-head">
-      <div class="item-sheet-thumb">${iconHtml}</div>
+    <div class="item-sheet-hero" style="background:linear-gradient(150deg, rgba(${_rgb},.28) 0%, rgba(${_rgb},.08) 56%, rgba(0,0,0,.24) 100%);border-color:rgba(${_rgb},.48);box-shadow:0 6px 24px rgba(${_rgb},.16), inset 0 1px 0 rgba(255,255,255,.14);">
+      <div class="item-sheet-thumb" style="background:radial-gradient(circle at 50% 32%, rgba(${_rgb},.45), rgba(0,0,0,.46));border:1px solid rgba(${_rgb},.58);box-shadow:0 0 18px rgba(${_rgb},.30);">${iconHtml}</div>
       <div style="flex:1;min-width:0;">
-        <div class="item-sheet-name">${escapeHtml(it.name)}</div>
-        <div style="margin-top:1.2vw;display:flex;align-items:center;gap:1.5vw;flex-wrap:wrap;">
-          <span class="inv-cat" style="background:${_ct.bg};color:${_ct.c};font-size:2.4vw;padding:.2vw 1.4vw;border-radius:99px;">${_ct.t}</span>
-          <span style="font-size:2.8vw;font-weight:bold;color:#ffd700;">持有 x${parseInt(it.qty) || 0}</span>
+        <div class="item-sheet-name" style="text-shadow:0 0 16px rgba(${_rgb},.60);">${escapeHtml(it.name)}</div>
+        <div style="margin-top:1.5vw;display:flex;align-items:center;gap:1.6vw;flex-wrap:wrap;">
+          <span class="item-sheet-pill" style="background:rgba(${_rgb},.26);color:rgb(${_rgb});border:1px solid rgba(${_rgb},.60);">${_ct.t}</span>
+          <span class="item-sheet-qty">持有 x${parseInt(it.qty) || 0}</span>
         </div>
       </div>
+      <button class="item-sheet-close" onclick="closeModal()" title="关闭" aria-label="关闭">✕</button>
     </div>
-    ${tags.length ? `<div style="display:flex;gap:1.5vw;flex-wrap:wrap;margin-bottom:2vw;">${tags.join("")}</div>` : ""}
-    ${effectText ? `<div style="font-size:3.1vw;color:#2ee84e;line-height:1.6;margin-bottom:1.5vw;">⚡ ${escapeHtml(effectText)}</div>` : ""}
-    ${it.desc ? `<div style="font-size:2.9vw;color:rgba(255,255,255,.55);line-height:1.65;">${escapeHtml(it.desc)}</div>` : ""}
+    <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);margin:0 0 2.2vw;"></div>
+    ${(tags.length || effectText || it.desc) ? `<div class="item-sheet-body">
+      ${tags.length ? `<div style="display:flex;gap:1.5vw;flex-wrap:wrap;margin-bottom:1.8vw;">${tags.join("")}</div>` : ""}
+      ${effectText ? `<div style="font-size:3.1vw;color:#2ee84e;line-height:1.65;margin-bottom:1.5vw;text-shadow:0 0 10px rgba(46,232,78,.35);">⚡ ${escapeHtml(effectText)}</div>` : ""}
+      ${it.desc ? `<div style="font-size:2.9vw;color:rgba(255,255,255,.66);line-height:1.7;">${escapeHtml(it.desc)}</div>` : ""}
+    </div>` : ""}
     <div class="item-sheet-ops">${btns.join("")}</div>`;
-  showModal(escapeHtml(it.name), body, null, "关闭", null, true, null, true);
+  showModal('道具详情', body, null, "关闭", null, true, null, true);
 };
 window.gmkInvSearch = function () {
   const el = document.getElementById('invSearchInput');
@@ -8520,14 +9020,61 @@ async function giveItemToPlayer(itemId, itemName) {
 
 // 门派和副业是两块独立区域，单独折叠，单独标题；不绑也能看另一边
 
-async function showSkills() {
-if (!requireHealth()) return;   // 修行灵力
+// ★ 技能折叠状态记忆：学/练技能后 showSkills() 会整体重绘，原来手动展开的分组会被"重置"回
+//   服务端存的 collapsed 状态（看起来就像被强行折叠）。这里把玩家的操作记在内存里，
+//   重绘后自动还原，做到"你打开的状态就一直保持"。
+(function () {
+  window._skillCollapse = window._skillCollapse || {};
+  window._skillCkToggle = function (el, key) {
+    var wrap = el && el.parentElement;
+    if (!wrap) return;
+    window._skillCollapse[key] = wrap.classList.toggle('collapsed');
+  };
+  function restore(root) {
+    if (!root) return;
+    var nodes = root.querySelectorAll('[data-ck]');
+    for (var i = 0; i < nodes.length; i++) {
+      var w = nodes[i];
+      var k = w.getAttribute('data-ck');
+      var want = window._skillCollapse[k];
+      if (want === undefined) continue;
+      if (w.classList.contains('collapsed') !== !!want) w.classList.toggle('collapsed', !!want);
+    }
+  }
+  function boot() {
+    // ★ 监听 content-profile 而不是 content-skills：技能已经内嵌到信息页里了，
+    //   观察祖先节点才能覆盖到动态创建的 #inlineSkillsHost
+    var box = document.getElementById('content-profile');
+    if (!box || !window.MutationObserver) return;
+    new MutationObserver(function () { restore(box); })
+      .observe(box, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
 
-  const c = $("content-skills");
+async function showSkills() {
+  // 标记"已渲染过一次"：switchTab/refreshAll 用它避免重复拉取（省云函数调用）。
+  //   注意：学习/升级/修炼成功后会直接调用本函数强制重拉，不受这个标记影响。
+  window._skillsRendered = true;
+  // 修行灵力：内嵌展示，不再做健康校验（健康为 0 时也应能看到自己的技能，只是不能修炼）
+
+  // ★ 修行灵力现在直接内嵌在「信息」页底部（按钮行里的【修行灵力】已删除），
+  //   所以这里不再 switchTab，只负责把内容渲染进内嵌容器。
+  const c = (function () {
+    let host = document.getElementById('inlineSkillsHost');
+    if (host) return host;
+    host = document.createElement('div');
+    host.id = 'inlineSkillsHost';
+    host.style.marginTop = '3vw';
+    const pb = document.querySelector('#content-profile .profile-bottom');
+    const root = document.getElementById('content-profile');
+    if (pb && pb.parentNode) pb.parentNode.insertBefore(host, pb.nextSibling);
+    else if (root) root.appendChild(host);
+    return host;
+  })();
 
   c.innerHTML = '<div class="empty">加载中…</div>';
-
-  switchTab('skills');
 
   const [res, invRes, sjRes] = await Promise.all([
 
@@ -8591,7 +9138,7 @@ async function showSkills() {
 
         let showUpgrade = false;
 
-        if (s.unlocked) {
+        if (s.unlocked && s.reachable) {
 
           if (s.upgrade_cost_item_id) {
 
@@ -8625,11 +9172,13 @@ async function showSkills() {
 
             <div style="flex:1;min-width:0;">
 
-              <div style="font-weight:bold;font-size:3.4vw;color:#fff;">${escapeHtml(s.name)} <span style="font-size:2.6vw;color:rgba(255,255,255,.5);">${s.unlocked ? 'Lv.' + (s.level||0) : 'Lv.' + (s.lv_required||0) + '+'}</span></div>
+              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)} <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${(!s.reachable) ? '需 Lv.' + (s.lv_required||0) : (s.unlocked ? ((parseInt(s.level) || 0) > 0 ? 'Lv.' + s.level : '未升级') : 'Lv.' + (s.lv_required||0) + '+')}</span></div>
 
               ${(!s.unlocked) ? `<div style="font-size:2.4vw;color:rgba(255,255,255,.55);margin-top:.3vw;">${greyed ? '<span style="color:#888;">🔒 未达等级 ' + s.lv_required + '</span>' : '<span style="color:#ffd700;">⚡ 可学习</span>'}</div>` : ''}
 
-              ${s.desc ? `<div style="font-size:2.6vw;color:rgba(255,255,255,.65);margin-top:.3vw;line-height:1.4;">${escapeHtml(s.desc)}</div>` : ''}
+              ${s.desc ? `<div style="font-size:2.35vw;color:rgba(255,255,255,.58);margin-top:.55vw;line-height:1.55;letter-spacing:.01em;">${escapeHtml(s.desc)}</div>` : ''}
+
+              ${s.note ? `<div style="font-size:2.05vw;color:rgba(255,233,168,.85);margin-top:.45vw;line-height:1.45;">${escapeHtml(s.note)}</div>` : ''}
 
             </div>
 
@@ -8639,9 +9188,9 @@ async function showSkills() {
 
               ${showUpgrade ? `<button onclick="upgradeSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(upItemId)}','${escapeHtml(upItemName)}',${upQty})" style="padding:1.5vw 2.5vw;background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">升级</button>` : ''}
 
-              ${s.unlocked ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
+              ${(s.unlocked && s.reachable) ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
 
-              ${s.unlocked && s.transferrable ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(s.unlocked && s.reachable && s.transferrable) ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -8657,11 +9206,11 @@ async function showSkills() {
 
       const wrapCls = 'collapse-wrap' + (sect.collapsed ? ' collapsed' : '');
 
-      html += `<div class="${wrapCls}" style="margin-bottom:3vw;background:rgba(255,255,255,.04);border:1px solid rgba(255,215,0,.3);border-radius:8px;padding:2vw;">
+      html += `<div class="${wrapCls}" data-ck="sect_${escapeHtml(sect.id || sect.name || '')}" style="margin-bottom:3vw;background:rgba(255,255,255,.04);border:1px solid rgba(255,215,0,.3);border-radius:8px;padding:2vw;">
 
-        <div class="collapse-head" onclick="this.parentElement.classList.toggle('collapsed')" style="font-weight:bold;color:#ffd700;font-size:3.6vw;cursor:pointer;">
+        <div class="collapse-head" onclick="_skillCkToggle(this,'sect_${escapeHtml(sect.id || sect.name || '')}')" style="font-weight:bold;color:#ffd700;font-size:3.6vw;cursor:pointer;">
 
-          <span>📜 ${escapeHtml(sect.name)} · ${escapeHtml(sect.profession||'')}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sect.skills||[]).length}）</span></span>
+          <span>${escapeHtml(sect.name)} · ${escapeHtml(sect.profession||'')}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sect.skills||[]).length}）</span></span>
 
           <span class="collapse-arrow">▼</span>
 
@@ -8695,9 +9244,18 @@ async function showSkills() {
 
         const opacity = greyed ? 'opacity:.45;' : '';
 
-        const lvTag = s.lv_required ? `Lv.${s.lv_required}+` : `Lv.不限 · 次数: ${s.count}`;
+        // ★ 后台「副业管理」里可以分别开关：显示 LV / 显示次数 / 显示所有按钮。
+        //   三个都关 → 这里只剩技能名称和效果，其他什么都不显示。
+        const _showLv = sj.show_lv !== false;
+        const _showCount = sj.show_count !== false;
+        const _showBtns = sj.show_buttons !== false;
+        // ★ LV 和次数合成同一栏，跟在技能名称后面
+        const lvTag = [
+          _showLv ? (s.lv_required ? `Lv.${s.lv_required}+` : 'Lv.不限') : '',
+          _showCount ? `次数 ${s.count}` : ''
+        ].filter(Boolean).join(' · ');
 
-        const countTxt = s.lv_required ? `次数: ${s.count}` : '';
+        const countTxt = '';
 
         // 修炼按钮：道具够时才显示
 
@@ -8729,23 +9287,25 @@ async function showSkills() {
 
             <div style="flex:1;min-width:0;">
 
-              <div style="font-weight:bold;font-size:3.4vw;color:#fff;">${escapeHtml(s.name)} <span style="font-size:2.6vw;color:rgba(255,255,255,.5);">${lvTag}</span></div>
+              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''} <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${lvTag}</span></div>
 
-              ${countTxt ? `<div style="font-size:2.4vw;color:rgba(255,255,255,.55);margin-top:.3vw;">${countTxt}${greyed ? ' <span style="color:#888;">🔒 未达等级</span>' : ''}</div>` : (greyed ? `<div style="font-size:2.4vw;color:#888;margin-top:.3vw;">🔒 未达等级 ${s.lv_required}</div>` : '')}
+              ${greyed ? `<div style="font-size:2.1vw;color:rgba(255,255,255,.42);margin-top:.4vw;">🔒 未达等级 ${s.lv_required}</div>` : ''}
 
-              ${s.desc ? `<div style="font-size:2.6vw;color:rgba(255,255,255,.65);margin-top:.3vw;line-height:1.4;">${escapeHtml(s.desc)}</div>` : ''}
+              ${s.desc ? `<div style="font-size:2.35vw;color:rgba(255,255,255,.58);margin-top:.55vw;line-height:1.55;letter-spacing:.01em;">${escapeHtml(s.desc)}</div>` : ''}
+
+              ${s.note ? `<div style="font-size:2.05vw;color:rgba(255,233,168,.85);margin-top:.45vw;line-height:1.45;">${escapeHtml(s.note)}</div>` : ''}
 
             </div>
 
             <div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:34vw;">
 
-              ${showCultivate ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
+              ${(_showBtns && showCultivate) ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
 
-              ${s.count >= 1 ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
+              ${(_showBtns && s.count >= 1) ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
 
-              ${s.count >= 1 ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
+              ${(_showBtns && s.count >= 1) ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
 
-              ${s.count >= 1 && s.transferrable ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(_showBtns && s.count >= 1 && s.transferrable) ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -8759,11 +9319,11 @@ async function showSkills() {
 
       const wrapCls = 'collapse-wrap' + (sj.collapsed ? ' collapsed' : '');
 
-      html += `<div class="${wrapCls}" style="margin-bottom:3vw;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.3);border-radius:8px;padding:2vw;">
+      html += `<div class="${wrapCls}" data-ck="sj_${escapeHtml(sj.id || sj.name || '')}" style="margin-bottom:3vw;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.3);border-radius:8px;padding:2vw;">
 
-        <div class="collapse-head" onclick="this.parentElement.classList.toggle('collapsed')" style="font-weight:bold;color:#c084fc;font-size:3.6vw;cursor:pointer;">
+        <div class="collapse-head" onclick="_skillCkToggle(this,'sj_${escapeHtml(sj.id || sj.name || '')}')" style="font-weight:bold;color:${escapeHtml(sj.title_color || '#c084fc')};font-size:3.6vw;cursor:pointer;">
 
-          <span>🛠️ ${escapeHtml(sj.name)}${sj.note ? ` <span style="font-size:2.6vw;color:rgba(255,255,255,.5);font-weight:normal;">${escapeHtml(sj.note)}</span>` : ''}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sj.skills||[]).length}）</span></span>
+          <span>${escapeHtml(sj.name)}${sj.note ? ` <span style="font-size:2.6vw;color:rgba(255,255,255,.5);font-weight:normal;">${escapeHtml(sj.note)}</span>` : ''}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sj.skills||[]).length}）</span></span>
 
           <span class="collapse-arrow">▼</span>
 
@@ -8805,34 +9365,29 @@ async function learnSectSkill(skillId, skillName) {
 
 }
 
-async function upgradeSectSkill(skillId, skillName, itemId, itemName, qty) {
-
-  // 文案：是否消耗【道具名称】x数量进行升级
-
+function upgradeSectSkill(skillId, skillName, itemId, itemName, qty) {
+  // ★ 不再用浏览器原生 confirm（有的浏览器会拦截、样式也土），改用页面内弹窗
   const msg = itemId
-
-    ? `是否消耗【${itemName}】x${qty}进行升级？`
-
+    ? `是否消耗【${itemName}】×${qty} 进行升级？`
     : `升级【${skillName}】（无道具消耗）？`;
+  showModal('技能升级', `
+    <div style="padding:1vw 0 2vw;font-size:3.6vw;line-height:1.85;color:rgba(255,255,255,.92);">${escapeHtml(msg)}</div>
+    <div style="font-size:2.8vw;color:rgba(255,255,255,.45);line-height:1.6;">升级成功后会立刻刷新下方技能列表</div>
+  `, function () {
+    // ★ showModal 的确定按钮不会自动关窗（约定是回调里自己关），漏了就"确认后窗口不消失"
+    closeModal();
+    _doUpgradeSectSkill(skillId, skillName);
+  }, '确认升级');
+}
 
-  if (!confirm(msg)) return;
-
+async function _doUpgradeSectSkill(skillId, skillName) {
   const r = await api('/api/sectUpgradeSkill', { dm: curId, skill_id: skillId });
-
   if (r.error) return toast(r.error, 'err');
-
   toast(`✨ ${skillName} → Lv.${r.newLevel}`, 'ok', 1500);
-
-  sysTip(`【${curPlayer.name}】升级了【${skillName}】`);
-
+  try { sysTip(`【${curPlayer.name}】升级了【${skillName}】`); } catch (e) { }
+  // 直接重拉技能列表。原来这里用 /api/login 刷新玩家数据 —— 加了登录口令后，
+  // 不带口令调的 login 会被校验拦掉（返回"请输入认证口令"），所以改成只刷技能
   showSkills();
-
-  // 刷新玩家数据
-
-  const me = await api('/api/login', { dm: curId });
-
-  if (me.ok) { curPlayer = me.player; renderPlayer(); }
-
 }
 
 // 通用「使用几次」数量弹窗
@@ -9456,11 +10011,11 @@ window.viewFriendBag = async function (friendId, friendName) {
   const items = res.items || [];
   if (!items.length) { showModal("🎒 " + nm + " 的背包", '<div class="empty">TA 的背包是空的</div>', null, "关闭", null, true); return; }
   const CT = {
-    bind:     { t: "绑定", bg: "rgba(255,255,255,.16)", c: "#d0d0d0" },
-    item:     { t: "物品", bg: "rgba(46,232,78,.22)",   c: "#8effa8" },
-    special:  { t: "特殊", bg: "rgba(255,215,0,.22)",   c: "#ffd700" },
-    pet:      { t: "宠物", bg: "rgba(255,140,0,.22)",   c: "#ffb35c" },
-    material: { t: "材料", bg: "rgba(192,132,252,.22)", c: "#d8b4fe" },
+    bind:     { t: "绑定", bg: "rgba(255,215,0,.22)",   c: "#ffd700", rgb: "255,215,0"   },
+    item:     { t: "物品", bg: "rgba(77,140,255,.22)",  c: "#8fb8ff", rgb: "77,140,255"  },
+    special:  { t: "特殊", bg: "rgba(192,132,252,.22)", c: "#d8b4fe", rgb: "192,132,252" },
+    pet:      { t: "宠物", bg: "rgba(255,122,184,.22)", c: "#ffb3d4", rgb: "255,122,184" },
+    material: { t: "材料", bg: "rgba(46,232,78,.22)",   c: "#8effa8", rgb: "46,232,78"   },
   };
   const _ci = { bind: 0, item: 1, special: 2, pet: 3, material: 4 };
   const list = items.slice().sort(function (x, y) { return (_ci[x.category || "item"] || 1) - (_ci[y.category || "item"] || 1); });
@@ -11254,6 +11809,9 @@ async function loadGameConfig() {
 
       GAME_CONFIG = res.config;
 
+      // 动态地图开关由后台控制 → 拿到配置后立刻按开关决定底层用动图还是静态 png
+      try { if (typeof window._applyMapBg === 'function') window._applyMapBg(); } catch (e) {}
+
       // 后台音乐被关闭：玩家手动开关也要尊重总开关（避免"开关显示 on 但实际被禁"）
 
       if (!GAME_CONFIG.bgm_enabled) {
@@ -11358,6 +11916,20 @@ async function changeName() {
 function renderJobTitleBadge(jobTitle) {
   if (!jobTitle) return '';
   return `<span style="background:linear-gradient(90deg,#a78bfa,#7c3aed);color:#fff;padding:.4vw 1.6vw;border-radius:999px;font-size:2.4vw;font-weight:bold;margin-left:1vw;">💼 ${escapeHtml(jobTitle)}</span>`;
+}
+
+// 自己在设置里修改登录口令（写入 players.login_pin，后台「🔐 口令」里能同步看到）
+async function changePin() {
+  const el = $('newPin');
+  const pin = String((el && el.value) || '').trim();
+  if (!pin) return toast('请输入新的登录口令', 'err', 1800);
+  if (Array.from(pin).length > 10) return toast('口令最多 10 个字', 'err', 2000);
+  // 提示里不回显口令本身（防止旁边的人瞄到）
+  if (!confirm('确认修改登录口令？\n\n下次登录要输入新口令，忘了只能找主持人重置。')) return;
+  const r = await api('/api/setPin', { dm: curId, pin: pin });
+  if (r.error) return toast(r.error, 'err', 2500);
+  if (el) el.value = '';
+  toast('✅ 登录口令已更新，下次登录请用它', 'ok', 2600);
 }
 
 async function changeAvatar() {
