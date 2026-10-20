@@ -8692,6 +8692,8 @@ async function loadInventoryTab() {
   if (c) c.innerHTML = '<div class="empty">加载中…</div>';
   const res = await api('/api/inventory?id=' + encodeURIComponent(curId));
   window._invItems = (res.ok && res.items) ? res.items : [];
+  // ★ 背包红框内容由这个接口一起返回 → 每次打开背包都是最新的（不用等心跳 15 秒）
+  window._bagNotice = (res && res.bag_notice !== undefined) ? String(res.bag_notice || '') : String((curPlayer && curPlayer.bag_notice) || '');
   if (window._invKw === undefined) window._invKw = '';
   gmkInvRender();
 }
@@ -8748,7 +8750,7 @@ window.gmkInvRender = function () {
   let html = searchBar;
   // ★ 搜索框和道具之间的自定义红框内容（后台可编辑，留空则不显示）
   try {
-    const _notice = String((curPlayer && curPlayer.bag_notice) || '').trim();
+    const _notice = String((window._bagNotice !== undefined ? window._bagNotice : ((curPlayer && curPlayer.bag_notice) || ''))).trim();
     if (_notice) {
       html += '<div style="margin:0 0 2.5vw;padding:2.6vw 3vw;border-radius:10px;'
         + 'background:linear-gradient(168deg, rgba(255,77,90,.16), rgba(180,18,31,.10));'
