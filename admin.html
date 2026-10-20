@@ -553,7 +553,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
 
   <!-- 日志 -->
   <div id="tab-logs" style="display:none;">
-    <div class="collapse-wrap collapsed card" style="padding:0;">
+    <div class="collapse-wrap card" style="padding:0;">
       <div class="collapse-head" onclick="this.parentElement.classList.toggle('collapsed')" style="padding:4vw;">
         <span style="font-size:4.4vw;font-weight:bold;color:#ff4d5a;">📜 玩家系统提示（红/绿/蓝全服消息，最近 100 条）</span>
         <span class="collapse-arrow">▼</span>
@@ -562,7 +562,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
         <div id="sysTipLogList"><div class="empty">加载中…</div></div>
       </div>
     </div>
-    <div class="collapse-wrap collapsed card" style="padding:0;">
+    <div class="collapse-wrap card" style="padding:0;">
       <div class="collapse-head" onclick="this.parentElement.classList.toggle('collapsed')" style="padding:4vw;">
         <span style="font-size:4.4vw;font-weight:bold;color:#ff4d5a;">📋 玩家操作日志（最近 100 条）</span>
         <span class="collapse-arrow">▼</span>
@@ -669,6 +669,17 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
         </div>
         <div><label>默认音量（0-100）</label><input id="cfg_bgm_default_volume" type="number" min="0" max="100" placeholder="60"></div>
       </div>
+      <div class="form-row">
+        <div><label>启动页背景音乐</label>
+          <select id="cfg_start_bgm_enabled"><option value="1">开启（玩家打开网页就播放）</option><option value="0">关闭（启动页静音）</option></select>
+        </div>
+        <div><label>启动页音量（0-100）</label><input id="cfg_start_bgm_volume" type="number" min="0" max="100" placeholder="60"></div>
+      </div>
+      <div class="form-row">
+        <div><label>属性骰子面数（玩家点属性框时用）</label><input id="cfg_attr_dice" type="number" min="2" max="100" placeholder="14"></div>
+        <div></div>
+      </div>
+      <div class="muted" style="font-size:2.5vw;margin-bottom:2vw;line-height:1.6;">玩家点大厅信息下面的属性框（精神/感知/体魄…）会掷一次骰：<b>点数 ≤ 该属性值</b>算成功。这里设的是骰子最大面数，默认 14（即 1~14）。</div>
 
       <div class="card-title" style="border-left-color:#4d8cff;font-size:4vw;margin-top:3vw;">🗺️ 大厅地图</div>
       <div class="form-row">
@@ -1463,8 +1474,8 @@ async function doLogin() {
     toast('网络错误：' + (e.message || '请检查后端'), 'err');
   }
 }
-function logout() {
-  if (!confirm('确认退出后台？')) return;
+async function logout() {
+  if (!await uiConfirm('确认退出后台？')) return;
   ADMIN_PASS = '';
   $("loginPass").value = '';
   $("loginBg").classList.remove('hide');
@@ -1634,7 +1645,7 @@ function renderPlayerList() {
 
 async function adjustGold(id, delta) {
   const sign = delta > 0 ? '+' : '';
-  if (!confirm(`确认给玩家 ${id} ${sign}${delta} 玄币？`)) return;
+  if (!await uiConfirm(`确认给玩家 ${id} ${sign}${delta} 玄币？`)) return;
   const res = await api('/api/admin/updateGold', { method: 'POST', body: JSON.stringify({ id, delta }) });
   if (res.error) return toast(res.error, 'err');
   toast(`${delta > 0 ? '赠送' : '扣除'}成功，当前 ${res.gold}`);
@@ -1721,7 +1732,7 @@ async function editPlayer(p) {
       <div><label>👁️ 感知</label><input id="m_sense" type="number" value="${p.sense||0}"></div>
       <div><label>💪 体魄</label><input id="m_body" type="number" value="${p.body||0}"></div>
     </div>
-    <!-- 扩展属性 4 列：敏捷 / 魅力 / 血脉 / 悟性（按用户要求排序��� -->
+    <!-- 扩展属性 4 列：敏捷 / 魅力 / 血脉 / 悟性（按用户要求排序 -->
     <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr;">
       <div><label>⚡ 敏捷</label><input id="m_agile" type="number" value="${p.agile||0}"></div>
       <div><label>✨ 魅力</label><input id="m_charm" type="number" value="${p.charm||0}"></div>
@@ -1803,7 +1814,7 @@ async function openEditDmPanel(id, currentDm, name) {
     if (newDm.length < 5) return toast('新 DM 至少 5 位', 'err');
     if (!/[a-zA-Z]/.test(newDm)) return toast('新 DM 必须包含字母', 'err');
     if (newDm === currentDm) return toast('新 DM 与当前相同', 'err');
-    if (!confirm(`确认把玩家【${name}】的 DM 从 ${currentDm} 改为 ${newDm}？\n\n此操作会同步所有关联数据，请确认无误！`)) return;
+    if (!await uiConfirm(`确认把玩家【${name}】的 DM 从 ${currentDm} 改为 ${newDm}？\n\n此操作会同步所有关联数据，请确认无误！`)) return;
     const res = await api('/api/changeId', { method: 'POST', body: JSON.stringify({ dm: currentDm, newDm }) });
     if (res.error) return toast('修改失败：' + res.error, 'err');
     toast('已修改，新 DM：' + newDm, 'ok', 2000);
@@ -1838,7 +1849,7 @@ async function viewPlayerFriends(id) {
 }
 
 async function adminDeleteFriend(playerId, friendId) {
-  if (!confirm(`删除 ${playerId} 的好友 ${friendId}？`)) return;
+  if (!await uiConfirm(`删除 ${playerId} 的好友 ${friendId}？`)) return;
   const res = await api('/api/admin/deleteFriend', { method: 'POST', body: JSON.stringify({ playerId, friendId }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -1880,7 +1891,7 @@ async function savePlayerPin(id) {
   closeModal();
 }
 async function clearPlayerPin(id) {
-  if (!confirm('确认清除这个玩家的登录口令？\n\n清除后他下次登录会被强制要求重新设置口令。')) return;
+  if (!await uiConfirm('确认清除这个玩家的登录口令？\n\n清除后他下次登录会被强制要求重新设置口令。')) return;
   const r = await api('/api/admin/clearPlayerPin', { method: 'POST', body: JSON.stringify({ id: id }) });
   if (r.error) return toast(r.error, 'err');
   toast('✅ 已清除，该玩家下次登录需重新设置口令', 'ok', 2600);
@@ -2120,7 +2131,7 @@ async function openTransferPlayerPanel(id, name) {
       btn.onclick = async () => {
         const placeId = btn.dataset.placeId;
         const placeName = btn.dataset.placeName;
-        if (!confirm(`确认将 ${name||id} 强行转移到【${placeName}】？\n不消耗玄币，红点会立即移动。`)) return;
+        if (!await uiConfirm(`确认将 ${name||id} 强行转移到【${placeName}】？\n不消耗玄币，红点会立即移动。`)) return;
         const r = await api('/api/admin/transferPlayer', { method: 'POST', body: JSON.stringify({ player_id: id, place_id: placeId }) });
         if (r.error) return toast(r.error, 'err');
         toast(`已转移到【${placeName}】`, 'ok', 1500);
@@ -2169,7 +2180,7 @@ async function viewPlayerChats(id) {
 }
 
 async function deletePlayer(id, name) {
-  if (!confirm(`确认把玩家「${name||id}」移到回收站？\n（可在右上角"回收站"里恢复或彻底删除；移到回收站后该玩家无法登录大厅）`)) return;
+  if (!await uiConfirm(`确认把玩家「${name||id}」移到回收站？\n（可在右上角"回收站"里恢复或彻底删除；移到回收站后该玩家无法登录大厅）`)) return;
   const res = await api('/api/admin/deletePlayer', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已移到回收站（可恢复）'); loadPlayers();
@@ -2177,7 +2188,7 @@ async function deletePlayer(id, name) {
 
 // 设置玩家顺序（弹窗输入数字；数字越小越靠前）
 async function setPlayerOrderPrompt(id, currentOrder) {
-  const v = prompt(`把玩家 ${id} 排在第几位？\n（数字越小越靠前，1=第一排；0=默认按更新时间排序）\n\n当前顺序：${currentOrder || 0}`, currentOrder > 0 ? String(currentOrder) : '1');
+  const v = await uiPrompt(`把玩家 ${id} 排在第几位？\n（数字越小越靠前，1=第一排；0=默认按更新时间排序）\n\n当前顺序：${currentOrder || 0}`, currentOrder > 0 ? String(currentOrder) : '1');
   if (v === null) return;
   const so = Math.max(parseInt(v) || 0, 0);
   const res = await api('/api/admin/setPlayerOrder', { method: 'POST', body: JSON.stringify({ id, sort_order: so }) });
@@ -2226,7 +2237,7 @@ async function showRecycleBin() {
       row.remove();
     };
     row.querySelector('[data-act="purge"]').onclick = async () => {
-      if (!confirm(`🔥 确认彻底删除玩家「${pname}」？\n此操作不可恢复！`)) return;
+      if (!await uiConfirm(`🔥 确认彻底删除玩家「${pname}」？\n此操作不可恢复！`)) return;
       const r = await api('/api/admin/purgePlayer', { method: 'POST', body: JSON.stringify({ id: pid }) });
       if (r.error) return toast(r.error, 'err');
       toast('已彻底删除');
@@ -2433,7 +2444,7 @@ function editPlace(id) {
     if (!fields.name) return toast('名称不能为空', 'err');
     if (!fields.cell) return toast('格子坐标不能为空', 'err');
     if (fields.id && fields.id !== p.id) {
-      if (!confirm(`确认将 ID 从 "${p.id}" 改为 "${fields.id}"？\n会同步更新所有玩家 place_id 引用。`)) return;
+      if (!await uiConfirm(`确认将 ID 从 "${p.id}" 改为 "${fields.id}"？\n会同步更新所有玩家 place_id 引用。`)) return;
     }
     // 前置检查：image base64 不能超过 250KB（字符），否则 CloudBase 网关会 413 拒收
     if (fields.image && fields.image.length > 250 * 1024) {
@@ -2451,7 +2462,7 @@ function editPlace(id) {
 }
 
 async function deletePlace(id) {
-  if (!confirm(`确认删除地点 ${id}？`)) return;
+  if (!await uiConfirm(`确认删除地点 ${id}？`)) return;
   const res = await api('/api/admin/deletePlace', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); loadPlaces();
@@ -2553,7 +2564,7 @@ function showEditJob(jobId, placeId, placeName) {
 }
 
 async function deleteJob(jobId, placeName) {
-  if (!confirm(`确认删除工作 ${jobId}？`)) return;
+  if (!await uiConfirm(`确认删除工作 ${jobId}？`)) return;
   const res = await api('/api/admin/deleteJob', { method: 'POST', body: JSON.stringify({ id: jobId }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -2775,13 +2786,13 @@ function filterShopItems(keyword) {
 // 一键从商场区（shop_items）同步道具定义到仓库区（item_library）
 // 用于：仓库被误删/误清空后，从已上架数据里恢复道具定义
 async function syncShopToLibrary() {
-  if (!confirm('确认从商场区同步道具定义到仓库区？\n\n只会新增仓库区里没有的道具，已存在的不会被覆盖或修改。\n\n建议先点"取消"，再用浏览器 Console 看实际同步数量。')) return;
+  if (!await uiConfirm('确认从商场区同步道具定义到仓库区？\n\n只会新增仓库区里没有的道具，已存在的不会被覆盖或修改。\n\n建议先点"取消"，再用浏览器 Console 看实际同步数量。')) return;
   // 先 dryRun 看会同步多少
   toast('正在扫描…');
   const dry = await api('/api/admin/syncShopToLibrary', { method: 'POST', body: JSON.stringify({ dryRun: true }) });
   if (dry.error) return toast('扫描失败：' + dry.error, 'err');
   if (!dry.to_create) return toast('没有需要同步的道具', 'ok', 2000);
-  if (!confirm(`扫描结果：\n商场区共 ${dry.total_shop} 条\n仓库区共 ${dry.total_lib} 条\n将新增 ${dry.to_create} 条到仓库区\n\n确认执行？`)) return;
+  if (!await uiConfirm(`扫描结果：\n商场区共 ${dry.total_shop} 条\n仓库区共 ${dry.total_lib} 条\n将新增 ${dry.to_create} 条到仓库区\n\n确认执行？`)) return;
   toast('正在同步…');
   const res = await api('/api/admin/syncShopToLibrary', { method: 'POST', body: JSON.stringify({ dryRun: false }) });
   if (res.error) return toast('同步失败：' + res.error, 'err');
@@ -3224,7 +3235,7 @@ async function editLibraryItem(id) {
 // 仓库区：删除道具定义（不影响已上架副本）
 // 关键修复：操作后只局部移除该行 + 缓存更新，不触发全量 loadItemsAdmin（道具多时全量刷新很慢）
 async function deleteLibraryItem(id, name) {
-  if (!confirm(`确认从仓库删除道具「${name||id}」？\n（已上架到商场的副本不受影响）`)) return;
+  if (!await uiConfirm(`确认从仓库删除道具「${name||id}」？\n（已上架到商场的副本不受影响）`)) return;
   const res = await api('/api/admin/deleteShop', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -3337,7 +3348,7 @@ async function editShopEntry(id) {
 
 // 商场区：删除条目（真的从商场消失，玩家再也看不到）
 async function deleteShopEntry(id, name) {
-  if (!confirm(`确认从商场删除条目「${name||id}」？\n（玩家大厅将再也看不到，且不可恢复。仓库原道具不受影响）`)) return;
+  if (!await uiConfirm(`确认从商场删除条目「${name||id}」？\n（玩家大厅将再也看不到，且不可恢复。仓库原道具不受影响）`)) return;
   const res = await api('/api/admin/deleteShopEntry', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -3434,7 +3445,7 @@ function showGiveItemPicker({ itemId, itemName, qty, mode = 'selected' }) {
     showModal(`🎁 赠送「${escapeHtml(itemName)}」×${qty}`, html, async () => {
       const targets = isAll ? players : players.filter(p => checked.has(p.id));
       if (!targets.length) return toast(isAll ? '玩家列表为空' : '请先勾选玩家', 'err');
-      if (!confirm(`确认给 ${targets.length} 位玩家每人赠送 ${qty} 个？`)) return;
+      if (!await uiConfirm(`确认给 ${targets.length} 位玩家每人赠送 ${qty} 个？`)) return;
       closeModal();
       let ok = 0, fail = 0;
       const t = toast(`开始赠送（共 ${targets.length} 位玩家）…`);
@@ -3657,7 +3668,7 @@ async function editSidejob(id) {
 }
 
 async function deleteSidejob(id, name) {
-  if (!confirm(`确认删除副业【${name||id}】？\n此副业下的所有技能、玩家绑定关系都会一并删除，无法恢复！`)) return;
+  if (!await uiConfirm(`确认删除副业【${name||id}】？\n此副业下的所有技能、玩家绑定关系都会一并删除，无法恢复！`)) return;
   const r = await api('/api/admin/deleteSidejob', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
   toast('已删除'); loadSidejobAdmin();
@@ -3683,7 +3694,7 @@ async function bindSidejobPlayer(sidejobId, sidejobName) {
   setTimeout(() => {
     document.querySelectorAll('#modal [data-pid]').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm(`确认将 ${btn.dataset.pname} 绑定到副业【${sidejobName}】？`)) return;
+        if (!await uiConfirm(`确认将 ${btn.dataset.pname} 绑定到副业【${sidejobName}】？`)) return;
         const r2 = await api('/api/admin/bindSidejob', { method: 'POST', body: JSON.stringify({ player_id: btn.dataset.pid, sidejob_id: sidejobId }) });
         if (r2.error) return toast(r2.error, 'err');
         toast(`已绑定 ${btn.dataset.pname}`); closeModal();
@@ -3763,7 +3774,7 @@ async function unbindSidejobPlayer(sidejobId) {
   setTimeout(() => {
     document.querySelectorAll('#modal [data-pid]').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm(`确认解绑该玩家？\n该玩家在该副业下所有已修炼的技能次数将被清空。`)) return;
+        if (!await uiConfirm(`确认解绑该玩家？\n该玩家在该副业下所有已修炼的技能次数将被清空。`)) return;
         const r2 = await api('/api/admin/unbindSidejob', { method: 'POST', body: JSON.stringify({ player_id: btn.dataset.pid, sidejob_id: sidejobId }) });
         if (r2.error) return toast(r2.error, 'err');
         toast('已解绑'); closeModal(); loadSidejobAdmin();
@@ -3955,7 +3966,7 @@ async function editSidejobSkill(skillId) {
 }
 
 async function deleteSidejobSkill(id) {
-  if (!confirm(`确认删除副业技能 ${id}？\n所有玩家该技能的修炼次数都会被清空！`)) return;
+  if (!await uiConfirm(`确认删除副业技能 ${id}？\n所有玩家该技能的修炼次数都会被清空！`)) return;
   closeModal();
   const r = await api('/api/admin/deleteSidejobSkill', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
@@ -4042,11 +4053,19 @@ async function editSect(id) {
       <div><label>门派职业</label><input id="ec_prof" value="${escapeHtml(s.profession||'')}"></div></div>
     <div class="form-row"><div><label>玩家端默认折叠？</label><select id="ec_collapsed"><option value="false"${!s.collapsed?' selected':''}>否（默认展开）</option><option value="true"${s.collapsed?' selected':''}>是（默认折叠）</option></select></div>
       <div></div></div>
+    <div class="form-row"><div><label>显示 LV</label><select id="ec_show_lv"><option value="true"${s.show_lv!==false?' selected':''}>✅ 显示</option><option value="false"${s.show_lv===false?' selected':''}>🚫 隐藏</option></select></div>
+      <div><label>显示次数/状态行</label><select id="ec_show_count"><option value="true"${s.show_count!==false?' selected':''}>✅ 显示</option><option value="false"${s.show_count===false?' selected':''}>🚫 隐藏</option></select></div></div>
+    <div class="form-row"><div><label>显示所有按钮</label><select id="ec_show_buttons"><option value="true"${s.show_buttons!==false?' selected':''}>✅ 显示</option><option value="false"${s.show_buttons===false?' selected':''}>🚫 隐藏</option></select></div>
+      <div></div></div>
+    <div class="muted" style="margin-bottom:2vw;font-size:2.5vw;line-height:1.6;">三个都选「隐藏」时，玩家点开这个门派只会看到技能名称和效果描述，LV、状态行、按钮都不显示。</div>
   `, async () => {
     const fields = {
       name: $("ec_name").value.trim(),
       profession: $("ec_prof").value.trim(),
       collapsed: $("ec_collapsed").value === 'true',
+      show_lv: $("ec_show_lv").value === 'true',
+      show_count: $("ec_show_count").value === 'true',
+      show_buttons: $("ec_show_buttons").value === 'true',
     };
     const res = await api('/api/admin/updateSect', { method: 'POST', body: JSON.stringify({ id, fields }) });
     if (res.error) return toast(res.error, 'err');
@@ -4055,7 +4074,7 @@ async function editSect(id) {
 }
 
 async function deleteSect(id) {
-  if (!confirm(`确认删除门派 ${id}？会同时删除该门派下所有技能 + 所有玩家的绑定和学习记录。`)) return;
+  if (!await uiConfirm(`确认删除门派 ${id}？会同时删除该门派下所有技能 + 所有玩家的绑定和学习记录。`)) return;
   const r = await api('/api/admin/deleteSect', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
   toast('已删除'); loadSectAdmin();
@@ -4151,7 +4170,7 @@ async function openSinglePlayerCap(pid, pname) {
       setTimeout(() => openPlayerCapPanel(), 100);  // 重新拉外层列表
     };
     $("capUnbindBtn").onclick = async () => {
-      if (!confirm('确认解绑？解绑后该玩家的所有 cap 不生效，可无限成长。')) return;
+      if (!await uiConfirm('确认解绑？解绑后该玩家的所有 cap 不生效，可无限成长。')) return;
       const r2 = await api('/api/admin/setPlayerCaps', { method: 'POST', body: JSON.stringify({ id: pid, cap_bound: 0 }) });
       if (r2.error) return toast(r2.error, 'err');
       toast('已解绑，cap 不生效', 'ok', 1200);
@@ -4218,7 +4237,7 @@ async function bindSectPlayer(sectId, sectName) {
   setTimeout(() => {
     document.querySelectorAll('#modal [data-pid]').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm(`确认将 ${btn.dataset.pname} 绑定到【${sectName}】？玩家 sect 字段会自动同步。`)) return;
+        if (!await uiConfirm(`确认将 ${btn.dataset.pname} 绑定到【${sectName}】？玩家 sect 字段会自动同步。`)) return;
         const r = await api('/api/admin/bindSect', { method: 'POST', body: JSON.stringify({ player_id: btn.dataset.pid, sect_id: sectId }) });
         if (r.error) return toast(r.error, 'err');
         toast(`已绑定 ${btn.dataset.pname}`); closeModal();
@@ -4319,7 +4338,7 @@ async function unbindSectPlayer(sectId) {
       btn.onclick = async () => {
         const pid = btn.dataset.pid;
         const pname = btn.dataset.pname;
-        if (!confirm(`确认解绑 ${pname}（DM: ${pid}）？`)) return;
+        if (!await uiConfirm(`确认解绑 ${pname}（DM: ${pid}）？`)) return;
         btn.disabled = true;
         btn.style.opacity = '.5';
         const r = await api('/api/admin/unbindSect', { method: 'POST', body: JSON.stringify({ player_id: pid, sect_id: sectId }) });
@@ -4429,12 +4448,46 @@ function showCreateSectSkill(sectId) {
   }, 50);
 }
 
+// 门派技能 · 自定义标签编辑（金色底咖啡色字，和称号同风格）
+window._esknTags = [];
+function esknRenderTags() {
+  const box = document.getElementById('eskn_tags');
+  if (!box) return;
+  if (!window._esknTags.length) {
+    box.innerHTML = '<div class="muted" style="font-size:2.4vw;">（暂无标签）</div>';
+    return;
+  }
+  box.innerHTML = window._esknTags.map(function (t, i) {
+    return '<span style="display:inline-flex;align-items:center;gap:1vw;'
+      + 'background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-weight:800;font-size:2.6vw;'
+      + 'padding:.8vw 1.6vw;border-radius:99px;margin:0 1vw 1vw 0;box-shadow:0 1px 3px rgba(0,0,0,.45);">'
+      + escapeHtml(t)
+      + '<span onclick="esknDelTag(' + i + ')" title="删除" style="cursor:pointer;color:#8a1c1c;font-weight:900;font-size:3vw;line-height:1;">✕</span>'
+      + '</span>';
+  }).join('');
+}
+function esknAddTag() {
+  const el = $('eskn_tag_input');
+  const v = String((el && el.value) || '').trim();
+  if (!v) return toast('请输入标签内容', 'err', 1500);
+  if (window._esknTags.length >= 8) return toast('最多 8 个标签', 'err', 1800);
+  if (window._esknTags.indexOf(v) >= 0) return toast('这个标签已经加过了', 'err', 1500);
+  window._esknTags.push(v.slice(0, 20));
+  if (el) el.value = '';
+  esknRenderTags();
+}
+function esknDelTag(i) {
+  window._esknTags.splice(i, 1);
+  esknRenderTags();
+}
+
 async function editSectSkill(skillId) {
   closeModal();
   setTimeout(async () => {
     const r = await api('/api/admin/sectSkillList', { method: 'POST', body: JSON.stringify({ skill_id: skillId }) });
     const s = (r.ok && r.skill) ? r.skill : null;
     if (!s) return toast('技能不存在', 'err');
+    window._esknTags = Array.isArray(s.tags) ? s.tags.slice(0, 8) : [];
     // 显示当前保存的记录，可修改后保存
     showModal('编辑技能：' + escapeHtml(s.name), `
       <div class="form-row"><div><label>技能 ID（可修改）</label><input id="eskn_id" value="${escapeHtml(s.id||'')}" placeholder="修改 ID 会重命名记录"></div>
@@ -4450,6 +4503,15 @@ async function editSectSkill(skillId) {
         <div><label>可转移</label><select id="eskn_trans"><option value="true"${s.transferrable?' selected':''}>是</option><option value="false"${!s.transferrable?' selected':''}>否</option></select></div></div>
       <div class="form-row"><div><label>显示升级按钮（玩家端可见）</label><select id="eskn_show"><option value="true"${(s.show_upgrade!==false)?' selected':''}>✅ 显示</option><option value="false"${s.show_upgrade===false?' selected':''}>🚫 隐藏</option></select></div>
         <div><label>复制技能</label><button class="mini-op green" id="eskn_copy_btn">📋 复制一个（ID 自动 +_copy+1）</button></div></div>
+      <div class="form-row full"><div><label>自定义标签（显示在技能名称后面 · 金色底咖啡色字）</label>
+        <div id="eskn_tags" style="margin-bottom:1.4vw;"></div>
+        <div style="display:flex;gap:1.5vw;align-items:flex-start;">
+          <input id="eskn_tag_input" placeholder="输入标签内容，如：稀有 / 群攻" style="flex:1;">
+          <button class="mini-op green" id="eskn_tag_add" type="button">＋ 添加</button>
+        </div>
+        <div class="muted" style="font-size:2.4vw;margin-top:1vw;">可添加多个，点标签上的 ✕ 删除。最多 8 个，每个最多 20 字。</div>
+      </div></div>
+      <div class="form-row full"><div><label>自定义注释（显示在技能描述下面 · 小字淡黄色）</label><input id="eskn_note" value="${escapeHtml(s.note||'')}" placeholder="留空则不显示"></div></div>
     `, async () => {
       const fields = {};
       fields.name = $("eskn_name").value.trim();
@@ -4462,6 +4524,8 @@ async function editSectSkill(skillId) {
       fields.upgrade_blue_cost = parseInt($("eskn_up_blue").value) || 0;
       fields.transferrable = ($("eskn_trans").value === 'true');
       fields.show_upgrade = ($("eskn_show").value === 'true');
+      fields.tags = (window._esknTags || []).slice();
+      fields.note = $("eskn_note").value.trim();
       const newIdVal = $("eskn_id").value.trim();
       // 如果改了 ID → 先创建新记录，再删旧记录（这里只用 update，如果 ID 改了会失败提示用户）
       const targetId = newIdVal || skillId;
@@ -4492,12 +4556,18 @@ async function editSectSkill(skillId) {
         // 不关当前窗口，但刷新技能列表
         manageSectSkills(s.sect_id, _SECT_SKILL_CACHE_NAME || '');
       };
+      // 自定义标签：渲染 + 绑定添加按钮
+      esknRenderTags();
+      const _addB = $('eskn_tag_add');
+      if (_addB) _addB.onclick = function () { esknAddTag(); };
+      const _inpB = $('eskn_tag_input');
+      if (_inpB) _inpB.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); esknAddTag(); } };
     }, 50);
   }, 50);
 }
 
 async function deleteSectSkill(id) {
-  if (!confirm(`确认删除技能 ${id}？所有玩家的学习记录也会被删除。`)) return;
+  if (!await uiConfirm(`确认删除技能 ${id}？所有玩家的学习记录也会被删除。`)) return;
   // 关键：不 closeModal()，刷新当前打开的"管理技能"窗口即可
   const r = await api('/api/admin/deleteSectSkill', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
@@ -4603,7 +4673,7 @@ function showEditTitle(titleId) {
 }
 
 async function deleteTitle(id) {
-  if (!confirm(`确认删除称号 ${id}？\n（所有玩家的该称号绑定也会被移除）`)) return;
+  if (!await uiConfirm(`确认删除称号 ${id}？\n（所有玩家的该称号绑定也会被移除）`)) return;
   const res = await api('/api/admin/deleteTitle', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); openTitleManager();
@@ -4638,7 +4708,7 @@ async function openBindTitlePanel(playerId, playerName) {
         btn.onclick = async () => {
           const titleId = btn.dataset.titleId;
           const titleName = btn.dataset.titleName;
-          if (!confirm(`确认给玩家【${playerName||playerId}】绑定称号【${titleName}】？`)) return;
+          if (!await uiConfirm(`确认给玩家【${playerName||playerId}】绑定称号【${titleName}】？`)) return;
           const res = await api('/api/admin/bindPlayerTitle', { method: 'POST', body: JSON.stringify({ player_id: playerId, title_id: titleId }) });
           if (res.error) return toast(res.error, 'err');
           toast(`已绑定：${titleName}`, 'ok', 1500);
@@ -4680,7 +4750,7 @@ async function openManageTitlesPanel(playerId, playerName) {
         btn.onclick = async () => {
           const titleId = btn.dataset.titleId;
           const titleName = btn.dataset.titleName;
-          if (!confirm(`确认解绑玩家【${playerName||playerId}】的称号【${titleName}】？`)) return;
+          if (!await uiConfirm(`确认解绑玩家【${playerName||playerId}】的称号【${titleName}】？`)) return;
           const res = await api('/api/admin/unbindPlayerTitle', { method: 'POST', body: JSON.stringify({ player_id: playerId, title_id: titleId }) });
           if (res.error) return toast(res.error, 'err');
           toast(`已解绑：${titleName}`, 'ok', 1500);
@@ -4701,7 +4771,7 @@ async function copySectSkill(srcId) {
 }
 // 删除副业技能（保持窗口打开）
 async function deleteSidejobSkill(id) {
-  if (!confirm(`确认删除副业技能 ${id}？\n所有玩家该技能的修炼次数都会被清空！`)) return;
+  if (!await uiConfirm(`确认删除副业技能 ${id}？\n所有玩家该技能的修炼次数都会被清空！`)) return;
   const r = await api('/api/admin/deleteSidejobSkill', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
   toast('已删除');
@@ -4785,8 +4855,8 @@ async function saveAnnLinks() {
   const el = $('cfg_announcement_links');
   if (!el) return;
   const v = String(el.value || '');
-  const bad = _parseAnnLinks(v).filter(function (x) { return x.kind === 'bad'; });
-  if (bad.length && !confirm('有 ' + bad.length + ' 个目标格式不对，玩家端会忽略它们。\n\n仍然保存吗？')) return;
+  const bad = _parseAnnLinks(v).filter(async function (x) { return x.kind === 'bad'; });
+  if (bad.length && !await uiConfirm('有 ' + bad.length + ' 个目标格式不对，玩家端会忽略它们。\n\n仍然保存吗？')) return;
   const r = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields: { announcement_links: v } }) });
   if (r.error) return toast('保存失败：' + r.error, 'err');
   toast('✅ 已保存，玩家端刷新后生效', 'ok', 2600);
@@ -4910,7 +4980,7 @@ async function toggleAnnouncement(id, curStatus) {
 }
 
 async function deleteAnnouncement(id) {
-  if (!confirm(`确认删除公告 ${id}？`)) return;
+  if (!await uiConfirm(`确认删除公告 ${id}？`)) return;
   const res = await api('/api/admin/deleteAnnouncement', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); loadAnnouncementAdmin();
@@ -4927,7 +4997,7 @@ async function saveStartNotice() {
 async function pushSystemAnnouncement() {
   const content = $("sysAnnounceContent").value.trim();
   if (!content) return toast('内容不能为空', 'err');
-  if (!confirm(`确认向所有玩家推送公告？\n\n${content}`)) return;
+  if (!await uiConfirm(`确认向所有玩家推送公告？\n\n${content}`)) return;
   const res = await api('/api/admin/pushAnnounce', { method: 'POST', body: JSON.stringify({ msg: content }) });
   if (res.error) return toast(res.error, 'err');
   toast('已推送'); $("sysAnnounceContent").value = '';
@@ -5016,7 +5086,7 @@ async function openCleanOrphanPosts() {
   // 0 条孤儿时只显示统计，按钮灰掉
   const onOk = async () => {
     if (orphanFound === 0) return closeModal();
-    if (!confirm(`确认物理删除 ${orphanFound} 条孤儿帖？\n\n此操作不可恢复！`)) return;
+    if (!await uiConfirm(`确认物理删除 ${orphanFound} 条孤儿帖？\n\n此操作不可恢复！`)) return;
     const r = await api('/api/admin/cleanOrphanPosts', { method: 'POST', body: JSON.stringify({ dryRun: false }) });
     if (r.error) return toast('清理失败：' + r.error, 'err');
     toast(`已清理 ${r.removedPosts} 条帖子（含 ${r.removedComments} 评论 / ${r.removedLikes} 点赞）`, 'ok', 3000);
@@ -5225,7 +5295,7 @@ async function adminLoadCommentsInto(postId) {
 }
 
 async function adminDeleteComment(cmtId, postId) {
-  if (!confirm('确认删除这条评论？')) return;
+  if (!await uiConfirm('确认删除这条评论？')) return;
   // 关键修复：admin 鉴权用 admin_pass（不在 body 里读 url？路由自动加）
   //   api() 函数（admin.html 版的）已经在 url 上自动加 admin_pass=...
   const res = await api('/api/deleteComment', { method: 'POST', body: JSON.stringify({ comment_id: cmtId }) });
@@ -5283,7 +5353,7 @@ async function adminEditPostFromGroup(id) {
 }
 // admin 玩家帖分组管理：删除确认
 async function adminDeletePostConfirm(id, title) {
-  if (!confirm(`确认删除帖子《${title}》？\n（这是物理删除，不可恢复）`)) return;
+  if (!await uiConfirm(`确认删除帖子《${title}》？\n（这是物理删除，不可恢复）`)) return;
   const res = await api('/api/admin/deletePost', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除', 'ok', 1200);
@@ -5403,7 +5473,7 @@ async function togglePostStatus(id, curStatus) {
 }
 
 async function deletePost(id) {
-  if (!confirm(`确认删除帖子 ${id}？`)) return;
+  if (!await uiConfirm(`确认删除帖子 ${id}？`)) return;
   const res = await api('/api/admin/deletePost', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); loadPostsAdmin();
@@ -5469,7 +5539,7 @@ async function managePostClaimers(postId) {
           const tip = act === 'success'
             ? `标记该玩家悬赏成功？\n将自动发放：${bountyTxt}\n并向玩家推送绿色公告。`
             : `标记该玩家悬赏失败？\n失败后玩家无法再接此悬赏。`;
-          if (!confirm(tip)) return;
+          if (!await uiConfirm(tip)) return;
           const path = act === 'success' ? '/api/admin/completeClaim' : '/api/admin/failClaim';
           const r = await api(path, { method: 'POST', body: JSON.stringify({ postId, playerId: pid }) });
           if (r.error) return toast(r.error, 'err');
@@ -5568,13 +5638,31 @@ async function loadLogs() {
     adminGiveItem: '赠道具(旧)', adminGiveItemToPlayer: '赠道具', adminRemoveItem: '删道具', adminRemoveItemQty: '删道具(按量)',
     adminPushAnnounce: '推公告',
     adminCreatePost: '发帖子', adminUpdatePost: '改帖子', adminDeletePost: '删帖子', adminCompleteClaim: '完成悬赏',
+    attrRoll: '属性掷骰', setPin: '设置口令',
+    sectLearnSkill: '学门派技能', sectUpgradeSkill: '升级门派技能', sectUseSkill: '使用门派技能', sectTransferSkill: '传授门派技能',
+    sidejobCultivate: '修炼副业技能', sidejobUseSkill: '使用副业技能', sidejobDiscardSkill: '删除副业技能', sidejobTransfer: '传授副业技能',
+    adminCreateSect: '建门派', adminUpdateSect: '改门派', adminDeleteSect: '删门派',
+    adminCreateSectSkill: '建门派技能', adminUpdateSectSkill: '改门派技能', adminDeleteSectSkill: '删门派技能', adminCopySectSkill: '复制门派技能',
+    adminCreateSidejob: '建副业', adminUpdateSidejob: '改副业', adminDeleteSidejob: '删副业',
+    adminCreateSidejobSkill: '建副业技能', adminUpdateSidejobSkill: '改副业技能', adminDeleteSidejobSkill: '删副业技能', adminCopySidejobSkill: '复制副业技能',
+    adminBindSect: '绑门派', adminBindSidejob: '绑副业',
+    adminCreateTitle: '建称号', adminUpdateTitle: '改称号', adminDeleteTitle: '删称号',
+    adminSetPlayerPin: '后台设口令', adminClearPlayerPin: '后台清口令',
+    adminCreateSkill: '建技能', adminUpdateSkill: '改技能', adminDeleteSkill: '删技能',
+    adminCreateJob: '建工作', adminUpdateJob: '改工作', adminDeleteJob: '删工作',
+    adminDeletePlace: '删地点', adminChangePlayerId: '改玩家ID',
+    adminBackupDelete: '删备份', adminRestoreBackup: '恢复备份',
+    adminRunAutoClean: '手动清理', adminSyncShopToLibrary: '仓库同步',
+    adminZoneSave: '改雷区', adminZoneDelete: '删雷区', adminZoneMove: '移动雷区',
+    adminChestDelete: '删宝箱', adminChestClear: '清空宝箱', adminChestResetAll: '重置宝箱',
+    adminChestSpawnNow: '立即刷宝箱', adminSetStartNotice: '改启动页广告',
   };
   let html = `<table><thead><tr><th>时间</th><th>玩家</th><th>动作</th><th>详情</th></tr></thead><tbody>`;
   for (const l of lgRes.logs) {
     html += `<tr>
       <td><span class="muted">${fmtTs(l.created_at)}</span></td>
       <td><span style="color:#ffd700;font-weight:bold;">${escapeHtml(l.player_name || l.player_id || '-')}</span><br><span class="id-tag" style="font-size:2vw;opacity:.6;">${escapeHtml(l.player_id||'-')}</span></td>
-      <td>${escapeHtml(actionLabel[l.action] || l.action)}</td>
+      <td style="color:${/^(adminDelete|adminRemove|adminClear|delete|remove|clear|discard|reject|kick|ban)/i.test(l.action||'') ? '#ff4d5a' : (/^(adminCreate|adminAdd|adminGenerate|adminCopy|create|add|backup|restore|accept)/i.test(l.action||'') ? '#2ee84e' : (/^(adminUpdate|adminChange|adminToggle|adminSet|update|change|set|save|toggle|edit|bind)/i.test(l.action||'') ? '#4d8cff' : '#ffd700'))}"><b>${escapeHtml(actionLabel[l.action] || l.action)}</b><br><span class="id-tag" style="font-size:1.9vw;opacity:.45">${escapeHtml(l.action || '')}</span></td>
       <td><span class="muted">${escapeHtml(l.detail||'')}</span></td>
     </tr>`;
   }
@@ -5747,7 +5835,7 @@ async function saveTreasureDailyLimit() {
 }
 
 async function resetTreasureDaily() {
-  if (!confirm('确认重置所有玩家的今日寻宝次数？\n所有玩家的 treasure_daily_used 将清零，相当于所有人都没消耗过。')) return;
+  if (!await uiConfirm('确认重置所有玩家的今日寻宝次数？\n所有玩家的 treasure_daily_used 将清零，相当于所有人都没消耗过。')) return;
   const res = await api('/api/admin/resetTreasureDaily', { method: 'POST' });
   if (res.error) return toast(res.error, 'err');
   toast(`已重置 ${res.reset || 0} 个玩家的今日次数`, 'ok', 1800);
@@ -5784,6 +5872,9 @@ async function loadGameConfig() {
   $("cfg_player_post_edit_cost").value = c.player_post_edit_cost != null ? c.player_post_edit_cost : 25;
   // BGM / 三大面板
   $("cfg_bgm_enabled").value = c.bgm_enabled ? '1' : '0';
+  if ($("cfg_start_bgm_enabled")) $("cfg_start_bgm_enabled").value = (c.start_bgm_enabled === false) ? '0' : '1';
+  if ($("cfg_start_bgm_volume")) $("cfg_start_bgm_volume").value = (c.start_bgm_volume != null ? c.start_bgm_volume : 60);
+  if ($("cfg_attr_dice")) $("cfg_attr_dice").value = (c.attr_dice_sides != null ? c.attr_dice_sides : 14);
   if ($("cfg_dynamic_map_enabled")) $("cfg_dynamic_map_enabled").value = (c.dynamic_map_enabled === false) ? '0' : '1';
   $("cfg_bgm_default_volume").value = c.bgm_default_volume != null ? c.bgm_default_volume : 60;
   $("cfg_world_channel_enabled").value = c.world_channel_enabled ? '1' : '0';
@@ -5871,6 +5962,9 @@ async function saveGameConfig() {
     dice_pvp_loser_type: $("cfg_dice_pvp_loser_type").value === 'gold' ? 'gold' : 'stock',
     dice_pvp_loser_value: getInt("cfg_dice_pvp_loser_value", 2),
     bgm_enabled: $("cfg_bgm_enabled").value === '1',
+    start_bgm_enabled: ($("cfg_start_bgm_enabled") || {}).value === '1',
+    start_bgm_volume: parseInt(($("cfg_start_bgm_volume") || {}).value) || 0,
+    attr_dice_sides: parseInt(($("cfg_attr_dice") || {}).value) || 14,
     dynamic_map_enabled: ($("cfg_dynamic_map_enabled") || {}).value === '1',
     world_channel_enabled: $("cfg_world_channel_enabled").value === '1',
     special_mall_enabled: $("cfg_special_mall_enabled").value === '1',
@@ -5976,10 +6070,10 @@ async function saveGameConfig() {
 
 // admin 调试：查看玩家寻宝持久化 state（用于排查"重新登录就刷新"的 bug）
 async function inspectPlayerState() {
-  const id = prompt('输入玩家 ID 查看 treasure_state 实际持久化内容：');
+  const id = await uiPrompt('输入玩家 ID 查看 treasure_state 实际持久化内容：');
   if (!id) return;
   const res = await api('/api/admin/inspectPlayerState?id=' + encodeURIComponent(id.trim()));
-  if (res.error) return alert('错误：' + res.error);
+  if (res.error) return await uiAlert('错误：' + res.error);
   let rawInfo;
   if (res.treasure_state_is_string) {
     rawInfo = '(字符串) ' + (res.treasure_state_raw_string || '(空字符串)');
@@ -6002,16 +6096,16 @@ ${JSON.stringify(res.treasure_state_parsed, null, 2)}
 pending_proxy 字段：
 ${res.pending_proxy || '(空)'}
   `.trim();
-  alert(out);
+  await uiAlert(out);
 }
 
 // admin 强制修复：把 treasure_state 字段从 object 类型清成 null，下次 ensureTreasureState 自动重建
 async function forceFixPlayerState() {
-  const id = prompt('输入玩家 ID 强制修复 treasure_state 字段（清空为 null，下一次操作自动重建）');
+  const id = await uiPrompt('输入玩家 ID 强制修复 treasure_state 字段（清空为 null，下一次操作自动重建）');
   if (!id) return;
   const res = await api('/api/admin/forceFixPlayerState', { method: 'POST', body: JSON.stringify({ id: id.trim() }) });
-  if (res.error) return alert('修复失败：' + res.error);
-  alert('已修复 ' + id + ' 的 treasure_state 字段\n下次该玩家打开寻宝时会自动重新生成 8 盒子 session');
+  if (res.error) return await uiAlert('修复失败：' + res.error);
+  await uiAlert('已修复 ' + id + ' 的 treasure_state 字段\n下次该玩家打开寻宝时会自动重新生成 8 盒子 session');
 }
 
 function showCreateChestItem() {
@@ -6045,7 +6139,7 @@ function showChestItemForm(it) {
     <div class="form-row"><div><label>自身概率 %（打开后是否真给物品，0=100=总给）</label><input id="chi_self" type="number" min="0" max="100" value="${it.self_probability!=null?it.self_probability:100}"></div>
       <div><label>库存（剩余可被抽取次数）</label><input id="chi_stock" type="number" min="0" value="${it.stock||1}"></div></div>
     <div class="form-row"><div>
-      <label>宝库分类（关键修复：决定此宝箱可被哪种玩��抽出）</label>
+      <label>宝库分类（关键修复：决定此宝箱可被哪种玩家抽出）</label>
       <select id="chi_category" onchange="gmkChestTierUI()" style="width:100%;padding:1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
         <option value=""${cat===''?' selected':''}>📦 全部玩法可出（默认）</option>
         <option value="treasure"${cat==='treasure'?' selected':''}>🗺️ 仅寻宝可出</option>
@@ -6110,7 +6204,7 @@ async function toggleChestItem(id, enabled) {
 }
 
 async function deleteChestItem(id, name) {
-  if (!confirm(`确认删除宝箱 ${name || id}？此操作不可撤销。`)) return;
+  if (!await uiConfirm(`确认删除宝箱 ${name || id}？此操作不可撤销。`)) return;
   const res = await api('/api/admin/deleteChestItem', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -6119,8 +6213,8 @@ async function deleteChestItem(id, name) {
 
 // 清空玩家端系统提示（保留管理员全服公告 + 后台操作日志）
 async function clearAllSysTips() {
-  if (!confirm('⚠️ 确认清空玩家端系统提示？\n\n此操作会删除 sys_tips 集合里**玩家互动产生的**所有提示，不可恢复！\n\n✅ 保留：\n• 你之前发的"📢 全服推送"（管理员公告）\n• 后台操作日志（logs 集合）\n\n❌ 会清空：\n• 上线播报、好友申请播报、决斗/偷菜通知、聊天提示…\n\n执行后所有玩家登录/刷新都看不到这些提示（公告仍然显示）。')) return;
-  if (!confirm('⚠️ 再次确认：真的要清空吗？')) return;
+  if (!await uiConfirm('⚠️ 确认清空玩家端系统提示？\n\n此操作会删除 sys_tips 集合里**玩家互动产生的**所有提示，不可恢复！\n\n✅ 保留：\n• 你之前发的"📢 全服推送"（管理员公告）\n• 后台操作日志（logs 集合）\n\n❌ 会清空：\n• 上线播报、好友申请播报、决斗/偷菜通知、聊天提示…\n\n执行后所有玩家登录/刷新都看不到这些提示（公告仍然显示）。')) return;
+  if (!await uiConfirm('⚠️ 再次确认：真的要清空吗？')) return;
   toast('正在清空…');
   const res = await api('/api/admin/clearSysTips', { method: 'POST', body: JSON.stringify({ confirm: true }) });
   if (res.error) return toast('清空失败：' + res.error, 'err');
@@ -6130,8 +6224,8 @@ async function clearAllSysTips() {
 // 清空今日所有玩家的打卡记录（让他们可重新打卡）
 async function resetDailyCheckin() {
   const today = new Date().toISOString().slice(0, 10);
-  if (!confirm(`⚠️ 确认清空今日（${today}）所有玩家的打卡记录？\n\n执行后：\n• 所有今天已打卡的玩家都能重新打卡（再次领奖）\n• 所有玩家 lastCheckin 字段被清空\n• 不可恢复！`)) return;
-  if (!confirm('⚠️ 二次确认：真的要清空吗？')) return;
+  if (!await uiConfirm(`⚠️ 确认清空今日（${today}）所有玩家的打卡记录？\n\n执行后：\n• 所有今天已打卡的玩家都能重新打卡（再次领奖）\n• 所有玩家 lastCheckin 字段被清空\n• 不可恢复！`)) return;
+  if (!await uiConfirm('⚠️ 二次确认：真的要清空吗？')) return;
   toast('正在清空…');
   const res = await api('/api/admin/resetDailyCheckin', { method: 'POST', body: JSON.stringify({ confirm: true, date: today }) });
   if (res.error) return toast('清空失败：' + res.error, 'err');
@@ -6151,8 +6245,8 @@ async function cleanInventorySnapshots() {
     return toast('扫描失败：' + (e.message || e), 'err', 3000);
   }
   if (dryRes.error) return toast('扫描失败：' + dryRes.error, 'err');
-  if (!confirm(`🧹 扫描完成：当前共有 ${dryRes.scanned} 条 inventory 记录。\n\n执行清理后会清空这些记录上的 name/desc/icon 字段（不动 qty/uid/玩家ID/时间戳）。\n\n确认清理？`)) return;
-  if (!confirm('⚠️ 二次确认：真的执行清理吗？')) return;
+  if (!await uiConfirm(`🧹 扫描完成：当前共有 ${dryRes.scanned} 条 inventory 记录。\n\n执行清理后会清空这些记录上的 name/desc/icon 字段（不动 qty/uid/玩家ID/时间戳）。\n\n确认清理？`)) return;
+  if (!await uiConfirm('⚠️ 二次确认：真的执行清理吗？')) return;
   toast('正在清理…（可能需要几秒）');
   const res = await api('/api/admin/cleanInventorySnapshots', { method: 'POST', body: JSON.stringify({ confirm: true, dryRun: false }) });
   if (res.error) return toast('清理失败：' + res.error, 'err');
@@ -6185,7 +6279,7 @@ async function repairInventoryUid() {
     + `共扫描背包行：${dry.scanned} 条`
     + (dry.stopped ? '\n\n（已到单次时间上限，先处理这一批，跑完可以再点一次继续）' : '')
     + '\n\n确认执行修复？';
-  if (!confirm(tip)) return;
+  if (!await uiConfirm(tip)) return;
   toast('正在修复…');
   const res = await api('/api/admin/repairInventory', { method: 'POST', body: JSON.stringify({ id: onlyId, dryRun: false }) });
   if (res.error) return toast('修复失败：' + res.error, 'err', 3000);
@@ -6235,8 +6329,8 @@ async function runAutoCleanNow() {
   const rem = dry.removed || {};
   const rows = Object.keys(rem).filter(function (k) { return rem[k] > 0; });
   if (!rows.length) return toast('✅ 没有超过保留期的数据，不需要清理', 'ok', 3500);
-  const detail = rows.map(function (k) { return '　' + k + '：' + rem[k] + ' 条'; }).join('\n');
-  if (!confirm('将清理以下过期数据：\n\n' + detail + '\n\n合计 ' + (dry.total || 0) + ' 条'
+  const detail = rows.map(async function (k) { return '　' + k + '：' + rem[k] + ' 条'; }).join('\n');
+  if (!await uiConfirm('将清理以下过期数据：\n\n' + detail + '\n\n合计 ' + (dry.total || 0) + ' 条'
     + '\n（每张表本次最多处理固定条数，量大的话可以再点几次）\n\n确认执行？')) return;
   toast('正在清理…');
   const res = await api('/api/admin/runAutoClean', { method: 'POST', body: JSON.stringify({}) });
@@ -6578,7 +6672,7 @@ async function saveGomokuCardForm() {
 }
 
 async function delGomokuCard(id, name) {
-  if (!confirm('确定删除技能卡【' + name + '】？\n已经抽到这张卡的进行中对局会显示为"已从卡库删除"。')) return;
+  if (!await uiConfirm('确定删除技能卡【' + name + '】？\n已经抽到这张卡的进行中对局会显示为"已从卡库删除"。')) return;
   var res = await api('/api/admin/gomokuCardDelete', { method: 'POST', body: JSON.stringify({ id: id }) });
   if (!res || res.error) { toast(res && res.error ? res.error : '删除失败', 'err'); return; }
   toast('已删除', 'ok');
@@ -6625,7 +6719,7 @@ async function loadGomokuRooms() {
 }
 
 async function endGomokuRoom(id) {
-  if (!confirm('强制结束这个房间？进行中的对局会作废并把赌注全部退回双方。')) return;
+  if (!await uiConfirm('强制结束这个房间？进行中的对局会作废并把赌注全部退回双方。')) return;
   var res = await api('/api/admin/gomokuRoomEnd', { method: 'POST', body: JSON.stringify({ id: id }) });
   if (!res || res.error) { toast(res && res.error ? res.error : '操作失败', 'err'); return; }
   toast('已结束该房间', 'ok');
@@ -6675,7 +6769,7 @@ function jumpToBackups(id) {
   switchTab('backup');
 }
 async function admRestoreBackup(backupId) {
-  if (!confirm("确认恢复到这份备份？\n\n如果玩家账号已被删除，会按这份备份重建整个账号。\n当前状态会先自动备份一份，所以恢复错了还能再退回来。")) return;
+  if (!await uiConfirm("确认恢复到这份备份？\n\n如果玩家账号已被删除，会按这份备份重建整个账号。\n当前状态会先自动备份一份，所以恢复错了还能再退回来。")) return;
   const r = await api("/api/admin/restoreBackup", { method: "POST", body: JSON.stringify({ backupId: backupId }) });
   if (r.error) return toast(r.error, "err");
   toast(r.rebuilt ? "✅ 账号已按备份重建，请刷新列表" : "✅ 已恢复，请刷新列表", "ok", 2400);
@@ -6790,13 +6884,13 @@ async function loadMerchantChests() {
   box.innerHTML = html;
 }
 async function delMerchantChest(id) {
-  if (!confirm('删除这个宝箱？')) return;
+  if (!await uiConfirm('删除这个宝箱？')) return;
   const res = await api('/api/admin/chestDelete', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); loadMerchantChests();
 }
 async function clearMerchantChests() {
-  if (!confirm('清空所有【未被领取】的宝箱？下次心跳会重新刷。')) return;
+  if (!await uiConfirm('清空所有【未被领取】的宝箱？下次心跳会重新刷。')) return;
   const res = await api('/api/admin/chestClear', { method: 'POST', body: JSON.stringify({}) });
   if (res.error) return toast(res.error, 'err');
   toast('已清空'); loadMerchantChests();
@@ -6953,7 +7047,7 @@ function openZoneEdit(id) {
     // ★ 行已在 body 字符串里内联生成，无需 setTimeout 渲染（那样会因为弹窗还没进 DOM 而失败）
 }
 async function delZone(id) {
-  if (!confirm('删除这个雷区？')) return;
+  if (!await uiConfirm('删除这个雷区？')) return;
   const res = await api('/api/admin/zoneDelete', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
   toast('已删除'); loadZones();
@@ -6972,7 +7066,7 @@ async function spawnChestsNow() {
   loadMerchantChests();
 }
 async function resetChestTimer() {
-  if (!confirm('清空所有宝箱记录（含已领取的）并重置刷新计时？\n下次任意玩家心跳时会立刻重新刷新。')) return;
+  if (!await uiConfirm('清空所有宝箱记录（含已领取的）并重置刷新计时？\n下次任意玩家心跳时会立刻重新刷新。')) return;
   const res = await api('/api/admin/chestResetAll', { method: 'POST', body: JSON.stringify({}) });
   if (res.error) return toast(res.error, 'err');
   toast('已重置（清掉 ' + (res.removed || 0) + ' 条记录），下次心跳会立刻刷新');

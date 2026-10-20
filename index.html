@@ -1456,18 +1456,17 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   margin-bottom:2vw !important;
   padding:2.2vw 2.4vw !important;
 }
-/* ★ 按钮改成「世界频道」那种款式：红渐变 + 10px 圆角 + 白色粗字（不是金色胶囊） */
+/* ★ 按钮不再统一红色：保留各个按钮自己的颜色（绿=使用/学习、蓝=升级、红=删除、金=传授），
+   这里只统一尺寸和形状，让它们靠颜色就能区分 */
 #inlineSkillsHost button {
-  background:linear-gradient(180deg,#ef2b3a,#b8121f) !important;
-  border:0 !important;
-  color:#fff !important;
-  font-weight:bold !important;
   border-radius:10px !important;
   padding:1.5vw 3.4vw !important;
   font-size:2.5vw !important;
   line-height:1.35 !important;
-  box-shadow:0 2px 9px rgba(180,10,25,.35) !important;
-  text-shadow:none !important;
+  font-weight:bold !important;
+  color:#fff !important;
+  border-width:1px !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.45);
   transition:transform .12s, filter .12s;
 }
 #inlineSkillsHost button:active { transform:scale(.95) !important; filter:brightness(1.12) !important; }
@@ -4327,6 +4326,9 @@ function enterHall() {
 
   $("hallPage").style.display = "flex";
 
+  // ★ 进大厅 → 切换到大厅那首背景音乐（音量/开关也换成大厅的配置）
+  try { playing = false; tryMusic(); } catch (e) { }
+
   // 切换账号时清空寻宝本地缓存（保证新账号从持久化数据开始）
 
   for (const k of Object.keys(_treasureOpenedLocal)) delete _treasureOpenedLocal[k];
@@ -4935,9 +4937,9 @@ function backOrLogout() {
 
 
 
-function logout() {
+async function logout() {
 
-  if (!confirm('确认退出登录？')) return;
+  if (!await uiConfirm('确认退出登录？')) return;
 
   // 清掉本地会话令牌（下次必须重新输入 ID + 认证口令）
   try { localStorage.removeItem('hundun_token'); } catch (e) {}
@@ -6375,7 +6377,7 @@ async function startJobForPlayer(jobId, place) {
 
   if (!curPlayer || !curPlayer.uid) return toast('UID 异常', 'err');
 
-  if (!confirm('确认开始打工？\n\n中途离线不丢失进度，但主动离职不计入今日次数（每天上限 3 次）')) return;
+  if (!await uiConfirm('确认开始打工？\n\n中途离线不丢失进度，但主动离职不计入今日次数（每天上限 3 次）')) return;
 
   const r = await api('/api/startJob', { uid: curPlayer.uid, job_id: jobId });
 
@@ -6394,7 +6396,7 @@ async function startJobForPlayer(jobId, place) {
 
 
 async function leaveCurrentJob() {
-  if (!confirm('确认离职？\n\n离职不计入今日完成次数（1 天最多 3 次），但当前进度也会丢失')) return;
+  if (!await uiConfirm('确认离职？\n\n离职不计入今日完成次数（1 天最多 3 次），但当前进度也会丢失')) return;
 
   const res = await api('/api/leaveJob', { uid: curPlayer.uid });
   if (res.error) return toast(res.error, 'err');
@@ -6556,8 +6558,14 @@ async function doTravel(place, price) {
   curPlayer = res.player;
 
   if (res.cell) curCell = res.cell;
-    // ★ 提示顺序：先「已抵达」，后「宝箱」—— 保证宝箱是最新一条，能顶替到顶部提示条
-    if (!autoLeaveNoticed) sysTip(`已抵达 ${place.name}`);
+    // ★ 这里**不再**自己推"已抵达"系统提示：后端已经推了一条「【你】前往了【地点】（已扣路费 N 元）」，
+    //   两边都推就会在提示栏里出现两条重复内容（一条折叠在下面，看着像没置顶）。
+    //   后端那条所有玩家都能看到，所以别人也能知道谁去了哪里；自己这边用 toast 给即时反馈。
+    if (!autoLeaveNoticed) {
+      const _fare = parseInt(res.price) || 0;
+      const _fly = res.flight_mode ? '（✈️飞行免玄币）' : (_fare > 0 ? `（已扣除路费 ${_fare} 元）` : '');
+      toast(`已抵达 ${place.name}${_fly}`, 'ok', 2600);
+    }
 
     // 到达格子时捡到宝箱（后端 travel 已自动结算）
     //   关键：sysTip 才会更新顶部提示条；toast 只是临时气泡。重要的都要调 sysTip。
@@ -7112,7 +7120,7 @@ async function submitComment(postId) {
 }
 
 async function deleteCommentByMe(cmtId, postId) {
-  if (!confirm('确认删除这条评论？')) return;
+  if (!await uiConfirm('确认删除这条评论？')) return;
   const res = await api('/api/deleteComment', { uid: curPlayer.uid, comment_id: cmtId });
   if (res.error) return toast(res.error, 'err');
   toast('已删除');
@@ -7525,7 +7533,7 @@ async function openEditMyPost(id) {
     <!-- 分区：玩家可重新选（关键修复：之前是"🔒 不可改"，下架后想换区只能删了重发） -->
     <div style="background:linear-gradient(90deg,rgba(77,140,255,.15),rgba(77,140,255,.04));border-left:3px solid #4d8cff;border-radius:6px;padding:1.8vw 2vw;margin-bottom:2.5vw;display:flex;justify-content:space-between;align-items:center;gap:2vw;">
       <div style="flex:1;">
-        <div style="font-size:2.4vw;color:rgba(255,255,255,.5);margin-bottom:.5vw;">📂 发布分区（可重新��择）</div>
+        <div style="font-size:2.4vw;color:rgba(255,255,255,.5);margin-bottom:.5vw;">📂 发布分区（可重新选择）</div>
         <select id="ep_area" style="width:100%;padding:1.8vw;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.2);border-radius:6px;font-size:3.4vw;color:#fff;outline:none;">
           ${areaOptions}
         </select>
@@ -7675,7 +7683,7 @@ async function openEditMyPost(id) {
 
 async function deleteMyPost(id) {
 
-  if (!confirm('确认删除这条帖子？\n（有悬赏被接的帖不能删除，会提示）')) return;
+  if (!await uiConfirm('确认删除这条帖子？\n（有悬赏被接的帖不能删除，会提示）')) return;
 
   const res = await api('/api/postDelete', { id, uid: curPlayer.uid });
 
@@ -7697,7 +7705,7 @@ async function toggleMyPost(id, curStatus) {
 
   const action = curStatus === 'closed' ? 'open' : 'close';
 
-  if (!confirm(`确认${action === 'open' ? '重新上架' : '下架'}这条帖子？`)) return;
+  if (!await uiConfirm(`确认${action === 'open' ? '重新上架' : '下架'}这条帖子？`)) return;
 
   const res = await api('/api/postToggle', { id, uid: curPlayer.uid, action });
 
@@ -8802,9 +8810,13 @@ async function useItem(itemId) {
 
   // 先拿背包当前数量
 
-  const inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
-
-  const item = (inv.ok && inv.items) ? inv.items.find(x => x.item_id === itemId) : null;
+  // ★ 不再先请求背包再弹窗：那次网络往返要 1~2 秒，就是"点了半天窗口才出来"的原因。
+  //   直接用背包页已经加载好的 window._invItems 立即弹窗；只有缓存里没有这个道具时，才回退去请求。
+  let item = (window._invItems || []).find(x => x.item_id === itemId);
+  if (!item) {
+    const _inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
+    item = (_inv.ok && _inv.items) ? _inv.items.find(x => x.item_id === itemId) : null;
+  }
 
   // 防御：背包里找不到就直接提示，不要弹一个没意义的数量窗口
 
@@ -8872,9 +8884,13 @@ async function discardItem(itemId) {
 
   // 先拉背包当前数量，弹数量窗口
 
-  const inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
-
-  const item = (inv.ok && inv.items) ? inv.items.find(x => x.item_id === itemId) : null;
+  // ★ 不再先请求背包再弹窗：那次网络往返要 1~2 秒，就是"点了半天窗口才出来"的原因。
+  //   直接用背包页已经加载好的 window._invItems 立即弹窗；只有缓存里没有这个道具时，才回退去请求。
+  let item = (window._invItems || []).find(x => x.item_id === itemId);
+  if (!item) {
+    const _inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
+    item = (_inv.ok && _inv.items) ? _inv.items.find(x => x.item_id === itemId) : null;
+  }
 
   if (!item || (item.qty || 0) <= 0) return toast('背包里没有这个道具', 'err', 1500);
 
@@ -8898,7 +8914,7 @@ async function discardItem(itemId) {
 
     const qty = Math.min(raw, maxQty);
 
-    if (!confirm(`确认丢弃 ${escapeHtml(item.name)} ×${qty}？此操作不可撤销。`)) return;
+    if (!await uiConfirm(`确认丢弃 ${escapeHtml(item.name)} ×${qty}？此操作不可撤销。`)) return;
 
     toast('正在丢弃…', 'ok', 600);
 
@@ -8932,9 +8948,13 @@ async function giveItemToPlayer(itemId, itemName) {
 
   // 先拿背包当前数量
 
-  const inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
-
-  const item = (inv.ok && inv.items) ? inv.items.find(x => x.item_id === itemId) : null;
+  // ★ 不再先请求背包再弹窗：那次网络往返要 1~2 秒，就是"点了半天窗口才出来"的原因。
+  //   直接用背包页已经加载好的 window._invItems 立即弹窗；只有缓存里没有这个道具时，才回退去请求。
+  let item = (window._invItems || []).find(x => x.item_id === itemId);
+  if (!item) {
+    const _inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
+    item = (_inv.ok && _inv.items) ? _inv.items.find(x => x.item_id === itemId) : null;
+  }
 
   const maxQty = (item && item.qty) || 1;
 
@@ -8988,7 +9008,7 @@ async function giveItemToPlayer(itemId, itemName) {
 
           const toName = btn.dataset.friendName;
 
-          if (!confirm(`确认赠送 ${itemName} ×${qty} 给 ${toName}？`)) return;
+          if (!await uiConfirm(`确认赠送 ${itemName} ×${qty} 给 ${toName}？`)) return;
 
           const r = await api('/api/giveItem', { dm: curId, to_id: toId, item_id: itemId, qty });
 
@@ -9172,7 +9192,7 @@ async function showSkills() {
 
             <div style="flex:1;min-width:0;">
 
-              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)} <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${(!s.reachable) ? '需 Lv.' + (s.lv_required||0) : (s.unlocked ? ((parseInt(s.level) || 0) > 0 ? 'Lv.' + s.level : '未升级') : 'Lv.' + (s.lv_required||0) + '+')}</span></div>
+              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''}${sect.show_lv === false ? '' : ` <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${(!s.reachable) ? '需 Lv.' + (s.lv_required||0) : (s.unlocked ? ((parseInt(s.level) || 0) > 0 ? 'Lv.' + s.level : '未升级') : 'Lv.' + (s.lv_required||0) + '+')}</span>`}</div>
 
               ${(!s.unlocked) ? `<div style="font-size:2.4vw;color:rgba(255,255,255,.55);margin-top:.3vw;">${greyed ? '<span style="color:#888;">🔒 未达等级 ' + s.lv_required + '</span>' : '<span style="color:#ffd700;">⚡ 可学习</span>'}</div>` : ''}
 
@@ -9184,13 +9204,13 @@ async function showSkills() {
 
             <div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:32vw;">
 
-              ${(!s.unlocked && s.reachable) ? `<button onclick="learnSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:#2ee84e;color:#000;border:none;border-radius:5px;font-size:2.8vw;font-weight:bold;cursor:pointer;">学习</button>` : ''}
+              ${(sect.show_buttons !== false && !s.unlocked && s.reachable) ? `<button onclick="learnSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:#2ee84e;color:#000;border:none;border-radius:5px;font-size:2.8vw;font-weight:bold;cursor:pointer;">学习</button>` : ''}
 
-              ${showUpgrade ? `<button onclick="upgradeSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(upItemId)}','${escapeHtml(upItemName)}',${upQty})" style="padding:1.5vw 2.5vw;background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">升级</button>` : ''}
+              ${(sect.show_buttons !== false && showUpgrade) ? `<button onclick="upgradeSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(upItemId)}','${escapeHtml(upItemName)}',${upQty})" style="padding:1.5vw 2.5vw;background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">升级</button>` : ''}
 
-              ${(s.unlocked && s.reachable) ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
+              ${(sect.show_buttons !== false && s.unlocked && s.reachable) ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
 
-              ${(s.unlocked && s.reachable && s.transferrable) ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(sect.show_buttons !== false && s.unlocked && s.reachable && s.transferrable) ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -9391,7 +9411,7 @@ async function _doUpgradeSectSkill(skillId, skillName) {
 }
 
 // 通用「使用几次」数量弹窗
-//   为什么要自己画：prompt() 在手机浏览器 / 站内 WebView 里会被屏蔽，
+//   为什么要自己画：await uiPrompt() 在手机浏览器 / 站内 WebView 里会被屏蔽，
 //   点了「使用」什么都不弹 —— 这就是「灵力修为里有时候不弹输入次数」的真正原因。
 //   这里统一换成站内模态框，和「删除次数」的写法保持一致，任何设备都一定能弹出来。
 function askQtyModal(title, hint, maxQty, okText, onConfirm) {
@@ -9492,7 +9512,7 @@ async function transferSectSkill(skillId, skillName) {
 
         const toName = btn.dataset.toName;
 
-        if (!confirm(`确认传授【${skillName}】给 ${toName}？${halfTip}\n传授后你仍保留此技能，对方无需重新学习。`)) return;
+        if (!await uiConfirm(`确认传授【${skillName}】给 ${toName}？${halfTip}\n传授后你仍保留此技能，对方无需重新学习。`)) return;
 
         const r = await api('/api/sectTransferSkill', { dm: curId, skill_id: skillId, to_id: toId });
 
@@ -9538,7 +9558,7 @@ async function cultivateSidejobSkill(skillId, skillName, itemId, itemName, qty, 
 
     : `修炼【${skillName}】（无道具消耗）？`;
 
-  if (!confirm(msg)) return;
+  if (!await uiConfirm(msg)) return;
 
   const r = await api('/api/sidejobCultivate', { dm: curId, skill_id: skillId });
 
@@ -9556,7 +9576,7 @@ async function cultivateSidejobSkill(skillId, skillName, itemId, itemName, qty, 
 
 async function useSidejobSkill(skillId, skillName, maxCount) {
 
-  // 关键修复：原来用 prompt()，手机浏览器会直接屏蔽 → 点了「使用」毫无反应。
+  // 关键修复：原来用 await uiPrompt()，手机浏览器会直接屏蔽 → 点了「使用」毫无反应。
   //   改成站内模态框，上限 = 当前剩余次数。
 
   askQtyModal(`使用【${skillName}】`, '输入要使用的次数（剩余 ' + (parseInt(maxCount) || 0) + ' 次）',
@@ -9975,7 +9995,7 @@ async function rejectFriendRequest(reqId) {
 
 async function deleteFriend(friendId, friendName) {
 
-  if (!confirm(`确认删除好友「${friendName}」？`)) return;
+  if (!await uiConfirm(`确认删除好友「${friendName}」？`)) return;
 
   const res = await api('/api/friendDel', { dm: curId, friendId });
 
@@ -11165,7 +11185,7 @@ async function duelChooseGame(friendId, friendName) {
 
 async function duelSteal(friendId, friendName) {
 
-  if (!confirm(`确认偷窃【${friendName}】？\n将随机减少对方 ${GAME_CONFIG.steal_min||5}-${GAME_CONFIG.steal_max||30} 玄币，每天只能偷这位好友一次。`)) return;
+  if (!await uiConfirm(`确认偷窃【${friendName}】？\n将随机减少对方 ${GAME_CONFIG.steal_min||5}-${GAME_CONFIG.steal_max||30} 玄币，每天只能偷这位好友一次。`)) return;
 
   const r = await api('/api/steal/try', { dm: curId, friendId });
 
@@ -11337,7 +11357,7 @@ function showDuelChooserModal({ duelId, game, selfRole, selfName, otherName, oth
 
       declineBtn.onclick = async () => {
 
-        if (!confirm('确认拒绝此决斗邀请？')) return;
+        if (!await uiConfirm('确认拒绝此决斗邀请？')) return;
 
         const r = await api('/api/duel/decline', { dm: curId, duelId });
 
@@ -11799,6 +11819,36 @@ let GAME_CONFIG = {
 
 };
 
+// ★ 点属性框掷骰：点数 ≤ 属性值 算成功
+//   骰子面数读后台配置 GAME_CONFIG.attr_dice_sides（默认 14）
+window.rollAttr = async function (rawName, rawVal) {
+  const name = String(rawName || '').replace(/[^\u4e00-\u9fa5A-Za-z]/g, '').trim();
+  const val = parseInt(rawVal);
+  if (!name) return;
+  if (!(val > 0)) return toast('该属性还没有数值', 'err', 1600);
+  // ★ 走服务端：由后端掷骰并推送【全服】系统提示（这样所有玩家都能看到，日志里也有记录）
+  const r = await api('/api/attrRoll', { dm: curId, name: name, val: val });
+  if (r && !r.error) {
+    toast(`${r.success ? '✅ 成功' : '❌ 失败'}！【${name}】结果 ${r.point} 点`, r.success ? 'ok' : 'err', 3000);
+    return;
+  }
+  if (r && r.error) { toast(r.error, 'err', 2000); return; }
+  // 接口异常时退回本地掷骰，至少不让点击没反应
+  const sides = parseInt(GAME_CONFIG && GAME_CONFIG.attr_dice_sides) || 14;
+  const point = 1 + Math.floor(Math.random() * sides);
+  toast(`${point <= val ? '✅ 成功' : '❌ 失败'}！【${name}】结果 ${point} 点`, point <= val ? 'ok' : 'err', 3000);
+};
+
+// 属性框点击（事件委托，避免给 8 个框逐个加 onclick）
+document.addEventListener('click', function (e) {
+  const box = e.target && e.target.closest ? e.target.closest('#content-profile .stat-item') : null;
+  if (!box) return;
+  const nEl = box.querySelector('.stat-name');
+  const vEl = box.querySelector('.stat-value');
+  if (!nEl || !vEl) return;
+  window.rollAttr(nEl.textContent, vEl.textContent);
+});
+
 async function loadGameConfig() {
 
   try {
@@ -11814,7 +11864,7 @@ async function loadGameConfig() {
 
       // 后台音乐被关闭：玩家手动开关也要尊重总开关（避免"开关显示 on 但实际被禁"）
 
-      if (!GAME_CONFIG.bgm_enabled) {
+      if (!(curId ? GAME_CONFIG.bgm_enabled : (GAME_CONFIG.start_bgm_enabled !== false))) {
 
         musicOn = false;
 
@@ -11826,7 +11876,9 @@ async function loadGameConfig() {
 
         // 应用后台设置的默认音量
 
-        const vol = parseInt(GAME_CONFIG.bgm_default_volume);
+        const vol = parseInt(curId
+          ? GAME_CONFIG.bgm_default_volume
+          : (GAME_CONFIG.start_bgm_volume != null ? GAME_CONFIG.start_bgm_volume : 60));
 
         if (!isNaN(vol) && vol >= 0 && vol <= 100) {
 
@@ -11844,7 +11896,24 @@ async function loadGameConfig() {
 
 }
 
-function tryMusic(){ if(GAME_CONFIG.bgm_enabled && musicOn && !playing){ if(window._gmkAnyLayerOpen && window._gmkAnyLayerOpen()) return; bgm.play().then(()=>playing=true).catch(()=>{}); } }
+// ★ 启动页 / 大厅 各用一首背景音乐（文件名可自己替换）：启动页 bgm_start.mp3，大厅 bgm.mp3
+//   没放 bgm_start.mp3 也没关系，播放失败会自动退回 bgm.mp3
+function tryMusic(){
+  const _start = !curId;                       // 还没登录 = 在启动页
+  const _en = _start ? (GAME_CONFIG.start_bgm_enabled !== false) : (GAME_CONFIG.bgm_enabled !== false);
+  if(!_en || !musicOn || playing) return;
+  if(window._gmkAnyLayerOpen && window._gmkAnyLayerOpen()) return;
+  const _src = _start ? 'bgm_start.mp3' : 'bgm.mp3';
+  try {
+    if (bgm.getAttribute('src') !== _src) { bgm.pause(); bgm.setAttribute('src', _src); bgm.load(); }
+  } catch(e) {}
+  bgm.play().then(()=>playing=true).catch(()=>{
+    // 启动页那首不存在 → 退回大厅那首，避免启动页静音
+    if (_src !== 'bgm.mp3') {
+      try { bgm.setAttribute('src','bgm.mp3'); bgm.load(); bgm.play().then(()=>playing=true).catch(()=>{}); } catch(e) {}
+    }
+  });
+}
 
 document.addEventListener("touchstart", tryMusic);
 
@@ -11886,11 +11955,11 @@ async function changeName() {
 
   const v = $("newName").value.trim();
 
-  if (!v) return alert("请输入新姓名");
+  if (!v) return await uiAlert("请输入新姓名");
 
   const res = await api('/api/changeName', { dm: curId, name: v });
 
-  if (res.error) return alert(res.error);
+  if (res.error) return await uiAlert(res.error);
 
   curPlayer.name = res.name;
 
@@ -11925,7 +11994,7 @@ async function changePin() {
   if (!pin) return toast('请输入新的登录口令', 'err', 1800);
   if (Array.from(pin).length > 10) return toast('口令最多 10 个字', 'err', 2000);
   // 提示里不回显口令本身（防止旁边的人瞄到）
-  if (!confirm('确认修改登录口令？\n\n下次登录要输入新口令，忘了只能找主持人重置。')) return;
+  if (!await uiConfirm('确认修改登录口令？\n\n下次登录要输入新口令，忘了只能找主持人重置。')) return;
   const r = await api('/api/setPin', { dm: curId, pin: pin });
   if (r.error) return toast(r.error, 'err', 2500);
   if (el) el.value = '';
@@ -11936,7 +12005,7 @@ async function changeAvatar() {
 
   const f = $("avatarFile").files[0];
 
-  if (!f) return alert("请先选择图片");
+  if (!f) return await uiAlert("请先选择图片");
 
   const compressed = await compressImage(f, 100);
 
@@ -12072,11 +12141,11 @@ async function redeem() {
 
   const k = $("cardKey").value.trim();
 
-  if (!k) return alert("请输入卡密");
+  if (!k) return await uiAlert("请输入卡密");
 
   const res = await api('/api/redeem', { dm: curId, key: k });
 
-  if (res.error) return alert(res.error);
+  if (res.error) return await uiAlert(res.error);
 
   curPlayer.gold = res.gold;
 
@@ -12370,6 +12439,63 @@ function fmtTime(ts) {
   return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 
 }
+
+
+/* ★ 统一弹窗：替代浏览器原生 alert/confirm/prompt（原生框会被拦截、样式也无法控制） */
+(function () {
+  var _res = null;
+  function box() {
+    var el = document.getElementById('uiDlg2');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'uiDlg2';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:7vw;';
+    el.innerHTML =
+      '<div style="width:100%;max-width:430px;border-radius:16px;padding:6vw 5.5vw;background:linear-gradient(168deg,rgba(34,28,18,.99),rgba(15,11,7,.995));border:1px solid rgba(255,215,0,.42);box-shadow:0 20px 56px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.08);">'
+      + '<div id="uiDlg2Title" style="display:none;font-size:4.6vw;font-weight:800;color:#ffd700;margin-bottom:3.2vw;letter-spacing:.02em;"></div>'
+      + '<div id="uiDlg2Msg" style="font-size:3.5vw;line-height:1.75;color:rgba(255,255,255,.92);white-space:pre-wrap;word-break:break-word;"></div>'
+      + '<input id="uiDlg2Input" style="display:none;width:100%;margin-top:3.6vw;padding:3.2vw;border-radius:10px;border:1px solid rgba(255,215,0,.42);background:rgba(0,0,0,.55);color:#fff;font-size:3.9vw;outline:none;box-sizing:border-box;">'
+      + '<div style="display:flex;gap:3vw;margin-top:5.5vw;">'
+      + '<button id="uiDlg2Cancel" style="flex:1;padding:3.4vw 0;border-radius:10px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);color:#fff;font-size:3.4vw;font-weight:700;cursor:pointer;">取消</button>'
+      + '<button id="uiDlg2Ok" style="flex:1;padding:3.4vw 0;border-radius:10px;border:0;background:linear-gradient(180deg,#ffd700,#c8a300);color:#3a2a00;font-size:3.4vw;font-weight:800;cursor:pointer;box-shadow:0 3px 12px rgba(200,163,0,.4);">确定</button>'
+      + '</div></div>';
+    document.body.appendChild(el);
+    el.querySelector('#uiDlg2Cancel').onclick = function () { close(el.dataset.mode === 'prompt' ? null : false); };
+    el.querySelector('#uiDlg2Ok').onclick = function () { close(el.dataset.mode === 'prompt' ? el.querySelector('#uiDlg2Input').value : true); };
+    el.addEventListener('click', function (e) { if (e.target === el) close(el.dataset.mode === 'prompt' ? null : false); });
+    return el;
+  }
+  function close(v) {
+    var el = document.getElementById('uiDlg2');
+    if (el) el.style.display = 'none';
+    var r = _res; _res = null;
+    if (r) r(v);
+  }
+  function open(opt) {
+    return new Promise(function (resolve) {
+      _res = resolve;
+      var el = box();
+      el.dataset.mode = opt.mode;
+      var t = el.querySelector('#uiDlg2Title');
+      if (opt.title) { t.style.display = 'block'; t.textContent = opt.title; } else { t.style.display = 'none'; }
+      el.querySelector('#uiDlg2Msg').textContent = String(opt.msg == null ? '' : opt.msg);
+      var inp = el.querySelector('#uiDlg2Input');
+      if (opt.mode === 'prompt') {
+        inp.style.display = 'block';
+        inp.setAttribute('type', opt.number ? 'number' : 'text');
+        inp.setAttribute('inputmode', opt.number ? 'numeric' : 'text');
+        inp.value = opt.def == null ? '' : String(opt.def);
+      } else { inp.style.display = 'none'; }
+      el.querySelector('#uiDlg2Cancel').style.display = (opt.mode === 'alert') ? 'none' : 'block';
+      el.style.display = 'flex';
+      if (opt.mode === 'prompt') setTimeout(function () { try { inp.focus(); } catch (e) { } }, 60);
+    });
+  }
+  window.uiAlert = function (msg, title) { return open({ msg: msg, title: title, mode: 'alert' }); };
+  window.uiConfirm = function (msg, title) { return open({ msg: msg, title: title, mode: 'confirm' }); };
+  window.uiPrompt = function (msg, def, title, number) { return open({ msg: msg, title: title, mode: 'prompt', def: def, number: number }); };
+})();
+
 
 function escapeHtml(s) {
 
@@ -14207,14 +14333,14 @@ window.gmkDoUseCard = function (cardId, target, targets) {
     if (bar && !bar._gmkDiagBound) {
       bar._gmkDiagBound = true;
       bar._gmkTaps = 0;
-      bar.addEventListener('click', function () {
+      bar.addEventListener('click', async function () {
         var now = Date.now();
         if (now - (bar._gmkLastTap || 0) > 1500) bar._gmkTaps = 0;
         bar._gmkLastTap = now;
         bar._gmkTaps++;
         if (bar._gmkTaps >= 3) {
           bar._gmkTaps = 0;
-          try { alert('【五子棋自检】\n' + gmkDebugInfo()); } catch (e) { }
+          try { await uiAlert('【五子棋自检】\n' + gmkDebugInfo()); } catch (e) { }
         }
       });
     }
