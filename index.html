@@ -1085,7 +1085,7 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 
           <!-- 签到小按钮：放在「账号」和「骰子」之间，金色小药丸，风格和称号一致 -->
           <div style="display:flex;justify-content:center;margin-top:1.2vw;">
-            <button onclick="dailyCheckin()" title="签到打卡" style="padding:.35vw 2.2vw;border-radius:999px;border:1px solid rgba(255,215,0,.8);background:linear-gradient(180deg,#ffd700,#c8a300);color:#4a3200;font-size:2vw;font-weight:800;line-height:1.6;cursor:pointer;box-shadow:0 0 10px rgba(255,215,0,.55), inset 0 1px 0 rgba(255,255,255,.5);white-space:nowrap;transition:transform .12s,box-shadow .12s;">签到</button>
+            <button id="signBtn" onclick="signBtnClick()" title="签到打卡" style="padding:.35vw 2.2vw;border-radius:999px;border:1px solid rgba(255,215,0,.8);background:linear-gradient(180deg,#ffd700,#c8a300);color:#4a3200;font-size:2vw;font-weight:800;line-height:1.6;cursor:pointer;box-shadow:0 0 10px rgba(255,215,0,.55), inset 0 1px 0 rgba(255,255,255,.5);white-space:nowrap;transition:transform .12s,box-shadow .12s;">签到</button>
           </div>
 
           <button class="dice-btn-avatar" onclick="toggleDiceMenu()" title="摇骰子"><img src="btn_dice.png"></button>
@@ -4179,6 +4179,10 @@ async function refreshAll() {
 
   ];
 
+  // ★ 先重新拉一次后台配置（背包红框内容、频道开关、音量、骰子面数…），
+  //   否则后台改了配置，玩家点刷新也看不到，必须重新登录。
+  try { await loadGameConfig(); } catch (e) { }
+
   // 3. 强制刷新当前 tab 的数据（切 tab 才会拉的，重新拉一次）
 
   try {
@@ -6643,7 +6647,7 @@ function switchTab(tab) {
 
   // 每次都重新加载（去掉 isSameTab 短路）
 
-  if (tab === 'profile') { renderPlayer(); if (!isSameTab) loadMap(); if (typeof showSkills === 'function' && !window._skillsRendered) showSkills(); }
+  if (tab === 'profile') { renderPlayer(); if (!isSameTab) loadMap(); if (typeof showSkills === 'function' && !window._skillsRendered) showSkills(); try { refreshSignBtn(); } catch (e) { } }
 
   else if (tab === 'posts') loadPosts();
 
@@ -8545,6 +8549,43 @@ async function rollDiceCustom() {
 
 // ============ 签到 ============
 
+// ★ 签到按钮：今天签过了就变灰不可点（防止忘记 / 重复点）
+function _todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+window.refreshSignBtn = function () {
+  const b = document.getElementById('signBtn');
+  if (!b) return;
+  let done = false;
+  const lc = String((curPlayer && curPlayer.lastCheckin) || '');
+  if (lc && lc.indexOf(_todayStr()) >= 0) done = true;
+  if (!done) {
+    try { done = localStorage.getItem('hundun_sign_' + curId + '_' + _todayStr()) === '1'; } catch (e) { }
+  }
+  if (done) {
+    b.textContent = '已签到'; b.disabled = true;
+    b.style.background = 'rgba(255,255,255,.10)';
+    b.style.borderColor = 'rgba(255,255,255,.18)';
+    b.style.color = 'rgba(255,255,255,.32)';
+    b.style.boxShadow = 'none'; b.style.cursor = 'not-allowed'; b.style.filter = 'grayscale(1)';
+    b.title = '今天已经签到过了';
+  } else {
+    b.textContent = '签到'; b.disabled = false;
+    b.style.background = 'linear-gradient(180deg,#ffd700,#c8a300)';
+    b.style.borderColor = 'rgba(255,215,0,.8)';
+    b.style.color = '#4a3200';
+    b.style.boxShadow = '0 0 10px rgba(255,215,0,.55), inset 0 1px 0 rgba(255,255,255,.5)';
+    b.style.cursor = 'pointer'; b.style.filter = '';
+    b.title = '签到打卡';
+  }
+};
+window.signBtnClick = async function () {
+  try { await dailyCheckin(); } catch (e) { }
+  try { localStorage.setItem('hundun_sign_' + curId + '_' + _todayStr(), '1'); } catch (e) { }
+  setTimeout(function () { try { refreshSignBtn(); } catch (e) { } }, 300);
+};
+
 async function dailyCheckin() {
 
   const res = await api('/api/checkin', { dm: curId });
@@ -8705,6 +8746,17 @@ window.gmkInvRender = function () {
   list.sort(function (a, b) { return _catRank(a) - _catRank(b); });
 
   let html = searchBar;
+  // ★ 搜索框和道具之间的自定义红框内容（后台可编辑，留空则不显示）
+  try {
+    const _notice = String((GAME_CONFIG && GAME_CONFIG.bag_notice) || '').trim();
+    if (_notice) {
+      html += '<div style="margin:0 0 2.5vw;padding:2.6vw 3vw;border-radius:10px;'
+        + 'background:linear-gradient(168deg, rgba(255,77,90,.16), rgba(180,18,31,.10));'
+        + 'border:1px solid rgba(255,77,90,.55);box-shadow:0 0 14px rgba(255,60,80,.18), inset 0 1px 0 rgba(255,255,255,.10);'
+        + 'color:#ffd9dc;font-size:2.9vw;line-height:1.7;white-space:pre-wrap;word-break:break-word;">'
+        + escapeHtml(_notice) + '</div>';
+    }
+  } catch (e) { }
   if (kw) {
     html += '<div style="font-size:2.9vw;color:rgba(255,255,255,.55);margin-bottom:2vw;">🔍 「<b style="color:#ffd700;">'
       + escapeHtml(rawKw.trim()) + '</b>」找到 <b style="color:#2ee84e;">' + list.length + '</b> 个道具</div>';

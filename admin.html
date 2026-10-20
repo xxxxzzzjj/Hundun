@@ -2039,7 +2039,29 @@ async function openPlayerInventoryPanel(id, name) {
     });
     body += '</div>';
   }
+  // ★ 背包页「搜索框下方红框内容」编辑（全局生效，所有玩家可见）
+  window.saveBagNotice = async function () {
+    const el = document.getElementById('bagNoticeInput');
+    if (!el) return;
+    const v = String(el.value || '');
+    const r = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields: { bag_notice: v } }) });
+    if (r.error) return toast('保存失败：' + r.error, 'err');
+    toast('✅ 已保存，玩家端刷新后生效', 'ok', 2600);
+  };
+  body += '<div style="margin-top:3.5vw;padding-top:3vw;border-top:1px solid rgba(255,255,255,.15);">'
+    + '<label>背包顶部红框内容（对所有玩家显示 · 留空=不显示 · 支持换行）</label>'
+    + '<textarea id="bagNoticeInput" rows="4" placeholder="例如：本周双倍掉落活动进行中！" style="width:100%;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:2vw;font-size:2.8vw;line-height:1.7;box-sizing:border-box;"></textarea>'
+    + '<button class="mini-op green" onclick="saveBagNotice()" style="margin-top:1.5vw;">💾 保存红框内容</button>'
+    + '<div class="muted" style="font-size:2.4vw;margin-top:1vw;">玩家端：背包页搜索框和道具之间会显示一个红色框（内容多会自动换行）。</div>'
+    + '</div>';
   showModal(`🎒 ${name||id} 的背包（${items.length}）`, body, () => closeModal(), '关闭');
+  // 弹窗打开后再拉当前内容填进输入框（不用 await，避免外层不是 async）
+  setTimeout(function () {
+    api('/api/admin/getGameConfig').then(function (cfg) {
+      const el = document.getElementById('bagNoticeInput');
+      if (el && cfg && cfg.ok && cfg.config) el.value = String(cfg.config.bag_notice || '');
+    }).catch(function () { });
+  }, 80);
   // 绑定按钮
   setTimeout(() => {
     // 编辑数量按钮
