@@ -3875,9 +3875,15 @@ function _apiUrlWithToken(path) {
 
 async function api(path, body) {
 
-  const opts = { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' } };
+  // ★ GET 不要带 Content-Type: application/json：
+  //   它不是 CORS 安全头，会给每个 GET 都触发一次 OPTIONS 预检，云函数调用次数直接翻倍。
+  //   只有 POST 才需要 JSON 请求头（POST 本来就要预检，省不掉）。
+  const opts = { method: body ? 'POST' : 'GET', cache: 'no-store' };
 
-  if (body) opts.body = JSON.stringify(body);
+  if (body) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
 
   try {
 
@@ -6647,7 +6653,15 @@ function switchTab(tab) {
 
   // 每次都重新加载（去掉 isSameTab 短路）
 
-  if (tab === 'profile') { renderPlayer(); if (!isSameTab) loadMap(); if (typeof showSkills === 'function' && !window._skillsRendered) showSkills(); try { refreshSignBtn(); } catch (e) { } }
+  if (tab === 'profile') {
+    renderPlayer();
+    if (!isSameTab) loadMap();
+    // ★ 15 秒节流：切回信息页时如果距上次渲染超过 15 秒就重拉，
+    //   后台改了技能/hide_btns 后玩家切页即可看到；停留不动仍需点右上角刷新。
+    //   同时避免连续切页重复拉 3 个技能接口。
+    if (typeof showSkills === 'function' && Date.now() - (window._skillsAt || 0) > 15000) showSkills();
+    try { refreshSignBtn(); } catch (e) { }
+  }
 
   else if (tab === 'posts') loadPosts();
 
@@ -9127,10 +9141,41 @@ async function giveItemToPlayer(itemId, itemName) {
   else boot();
 })();
 
+// ★ 技能按钮单独隐藏：后台每个技能可存 hide_btns 数组（要隐藏的按钮 key）。
+//   玩家端最终显示 = 分组开关（门派/副业的 show_buttons）AND 本技能没有隐藏该 key。
+function _isSkillBtnHidden(s, key) {
+  return !!(s && Array.isArray(s.hide_btns) && s.hide_btns.indexOf(key) >= 0);
+}
+
+// ★ 技能版本轮询：每 60 秒轻量查一次版本号，只有后台改过技能/分组开关才重拉技能列表。
+//   这样玩家停在信息页也能自动同步，而且每次只多一个很小的请求。
+(function () {
+  if (window._skillsRevTimer) return;
+  window._skillsRevTimer = setInterval(async function () {
+    try {
+      if (!curId) return;
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      if (curTab !== 'profile') return;
+      const r = await api('/api/skillsRev');
+      if (!r || !r.ok) return;
+      const rev = r.rev || 0;
+      if (window._skillsRev == null) { window._skillsRev = rev; return; }
+      if (rev !== window._skillsRev) {
+        window._skillsRev = rev;
+        if (typeof showSkills === 'function') showSkills();
+      }
+    } catch (e) { }
+  }, 60000);
+})();
+
 async function showSkills() {
-  // 标记"已渲染过一次"：switchTab/refreshAll 用它避免重复拉取（省云函数调用）。
-  //   注意：学习/升级/修炼成功后会直接调用本函数强制重拉，不受这个标记影响。
-  window._skillsRendered = true;
+  // ★ 请求序号：连续刷新（点刷新 / 切页签 / 操作后重拉）时只让最后一次渲染，
+  //   避免旧请求晚回来把新数据覆盖掉。
+  const _seq = (window._skillsSeq = (window._skillsSeq || 0) + 1);
+  // ★ 记录本次开始时间：切页签刷新用它做 15 秒节流，避免连续切页重复拉 3 个接口。
+  window._skillsAt = Date.now();
+  // 渲染状态标记：只有真正渲染成功才置 true，加载失败时保持 false 方便排查/重试。
+  window._skillsRendered = false;
   // 修行灵力：内嵌展示，不再做健康校验（健康为 0 时也应能看到自己的技能，只是不能修炼）
 
   // ★ 修行灵力现在直接内嵌在「信息」页底部（按钮行里的【修行灵力】已删除），
@@ -9160,6 +9205,13 @@ async function showSkills() {
 
   ]);
 
+  // 有更新的请求已经发出 → 这次结果作废，避免旧数据覆盖新数据
+  if (_seq !== window._skillsSeq) return;
+  // ★ 接口失败时不要把“加载失败”伪装成“没有绑定门派/副业”
+  const _loadErr = (res && res.error) || (sjRes && sjRes.error) || '';
+  // 后端技能版本号：轮询 /api/skillsRev 时用它判断是否需要自动重拉
+  const _rev = (res && res.skillsRev != null) ? res.skillsRev : (sjRes && sjRes.skillsRev);
+  if (_rev != null) window._skillsRev = _rev;
   const sects = (res.ok && res.sects) ? res.sects : [];
 
   const sidejobs = (sjRes.ok && sjRes.sidejobs) ? sjRes.sidejobs : [];
@@ -9168,6 +9220,12 @@ async function showSkills() {
 
   if (!sects.length && !sidejobs.length) {
 
+    if (_loadErr) {
+      c.innerHTML = `<div class="empty">技能数据加载失败：${escapeHtml(_loadErr)}</div><button class="back-btn" onclick="showSkills()">重新加载</button>`;
+      return;
+    }
+    window._skillsRendered = true;
+    window._skillsAt = Date.now();
     c.innerHTML = '<div class="empty">尚未绑定任何门派/副业，等待 admin 分配</div><button class="back-btn" onclick="switchTab(\'profile\')">返回</button>';
 
     return;
@@ -9191,6 +9249,11 @@ async function showSkills() {
   ((invRes.ok && invRes.items) ? invRes.items : []).forEach(it => { invName[it.item_id] = it.name || it.item_id; });
 
   let html = `<div style="font-size:3vw;color:rgba(255,255,255,.6);margin-bottom:2vw;">当前等级 Lv.${playerLv} · 蓝条 ${stock}</div>`;
+
+  // ★ 部分加载失败（比如门派成功、副业失败）：保留已拿到的数据，同时给出重试入口
+  if (_loadErr) {
+    html += `<div class="empty" style="font-size:2.6vw;color:#ff9f43;padding:1.5vw 0;">部分技能数据加载失败：${escapeHtml(_loadErr)} <a href="javascript:void(0)" onclick="showSkills()" style="color:#ffd700;">重新加载</a></div>`;
+  }
 
 
 
@@ -9258,13 +9321,13 @@ async function showSkills() {
 
             <div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:32vw;">
 
-              ${(sect.show_buttons !== false && !s.unlocked && s.reachable) ? `<button onclick="learnSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:#2ee84e;color:#000;border:none;border-radius:5px;font-size:2.8vw;font-weight:bold;cursor:pointer;">学习</button>` : ''}
+              ${(sect.show_buttons !== false && !_isSkillBtnHidden(s, 'learn') && !s.unlocked && s.reachable) ? `<button onclick="learnSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:#2ee84e;color:#000;border:none;border-radius:5px;font-size:2.8vw;font-weight:bold;cursor:pointer;">学习</button>` : ''}
 
-              ${(sect.show_buttons !== false && showUpgrade) ? `<button onclick="upgradeSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(upItemId)}','${escapeHtml(upItemName)}',${upQty})" style="padding:1.5vw 2.5vw;background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">升级</button>` : ''}
+              ${(sect.show_buttons !== false && s.show_upgrade !== false && !_isSkillBtnHidden(s, 'upgrade') && showUpgrade) ? `<button onclick="upgradeSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(upItemId)}','${escapeHtml(upItemName)}',${upQty})" style="padding:1.5vw 2.5vw;background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">升级</button>` : ''}
 
-              ${(sect.show_buttons !== false && s.unlocked && s.reachable) ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
+              ${(sect.show_buttons !== false && !_isSkillBtnHidden(s, 'use') && s.unlocked && s.reachable) ? `<button onclick="useSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.blue_cost) || 0})" title="${escapeHtml(useTip)}" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用${useTip ? ' '+useTip : ''}</button>` : ''}
 
-              ${(sect.show_buttons !== false && s.unlocked && s.reachable && s.transferrable) ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(sect.show_buttons !== false && !_isSkillBtnHidden(s, 'transfer') && s.unlocked && s.reachable && s.transferrable) ? `<button onclick="transferSectSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -9373,13 +9436,13 @@ async function showSkills() {
 
             <div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:34vw;">
 
-              ${(_showBtns && showCultivate) ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
+              ${(_showBtns && s.show_upgrade !== false && !_isSkillBtnHidden(s, 'cultivate') && showCultivate) ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
 
-              ${(_showBtns && s.count >= 1) ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
+              ${(_showBtns && !_isSkillBtnHidden(s, 'use') && s.count >= 1) ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
 
-              ${(_showBtns && s.count >= 1) ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
+              ${(_showBtns && !_isSkillBtnHidden(s, 'discard') && s.count >= 1) ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
 
-              ${(_showBtns && s.count >= 1 && s.transferrable) ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(_showBtns && !_isSkillBtnHidden(s, 'transfer') && s.count >= 1 && s.transferrable) ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -9420,6 +9483,10 @@ async function showSkills() {
   html += '<button class="back-btn" onclick="switchTab(\'profile\')">返回</button>';
 
   c.innerHTML = html;
+
+  // 只有全部接口都成功才标记为已渲染；有错误时允许切回页签再自动重试
+  window._skillsRendered = !_loadErr;
+  if (!_loadErr) window._skillsAt = Date.now();
 
 }
 

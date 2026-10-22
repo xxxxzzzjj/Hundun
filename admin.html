@@ -1202,13 +1202,16 @@ let ALL_SECTS = [];
 let ALL_SECT_BINDS = [];
 const API_BASE = 'https://hundun-d0g97wc3v815cd196-1497599973.ap-shanghai.app.tcloudbase.com';
 let ADMIN_PASS = '';
+// 云函数能力标记：null=还没检测；true=新后端支持对应功能；false=旧后端
+let BACKEND_HAS_HIDE_BTNS = null;
+let BACKEND_HAS_RENAME_SKILL = null;
 let curTab = 'players';
 // 注意：$ 已在第一个 script 里用 var 提前定义（避免第一个 IIFE 抛 ReferenceError），这里不重复声明
-function toast(msg, type='ok') {
+function toast(msg, type='ok', duration = 2000) {
   const t = $("toast");
   t.textContent = msg;
   t.className = 'toast show ' + type;
-  setTimeout(() => t.className = 'toast', 2000);
+  setTimeout(() => t.className = 'toast', duration);
 }
 function api(path, opts = {}) {
   // 关键修复：不再发自定义请求头（X-Admin-Pass），避免触发 CORS 预检（OPTIONS）。
@@ -1221,7 +1224,7 @@ function api(path, opts = {}) {
     : {};
   // 关键修复：构造一个不包含 admin_pass 的 debug URL（之前直接打印 url → 控制台含密码明文）
   const safeUrl = url.replace(/([?&])admin_pass=[^&]*/, '$1admin_pass=***');
-  return fetch(url, { ...opts, headers: { ...headers, ...(opts.headers||{}) } })
+  return fetch(url, { ...opts, cache: 'no-store', headers: { ...headers, ...(opts.headers||{}) } })
     .then(r => r.json().catch(() => ({})))
     .then(data => {
       // 后端成功响应形如 { ok:true, ... }；错误形如 { error:'...' }（无论 HTTP 状态）
@@ -1466,6 +1469,19 @@ async function doLogin() {
     const res = await api('/api/admin/players');
     console.log('[doLogin] 返回结果 =', res);
     if (res.error) { ADMIN_PASS = ''; return toast(res.error, 'err'); }
+    // ★ 云函数能力自检：旧后端没有 hide_btns / rename_skill，后台看起来成功但实际不生效。
+    //   这里只做提示，不阻止登录；检测不到（网络错误）时保持 null，不误报。
+    try {
+      const ver = await api('/api/health');
+      if (ver && ver.ok) {
+        BACKEND_HAS_HIDE_BTNS = !!(ver.features && ver.features.hide_btns);
+        BACKEND_HAS_RENAME_SKILL = !!(ver.features && ver.features.rename_skill);
+        if (!BACKEND_HAS_HIDE_BTNS || !BACKEND_HAS_RENAME_SKILL) {
+          console.warn('[admin] 云函数版本过旧，缺少 hide_btns/rename_skill 特性：', ver);
+          setTimeout(() => toast('⚠ 云函数未更新：请重新部署 backend/index.js，否则「单独隐藏按钮」/「改技能 ID」不会正常生效', 'err', 7000), 400);
+        }
+      }
+    } catch (e) { }
     $("loginBg").classList.add('hide');
     refreshAll();
   } catch (e) {
@@ -3805,8 +3821,54 @@ async function unbindSidejobPlayer(sidejobId) {
   }, 50);
 }
 
+// ============ 技能按钮 · 单独隐藏（hide_btns） ============
+// 后台弹窗里的勾选项 → 存 hide_btns 数组（勾上 = 隐藏）。玩家端最终显示 =
+// 分组开关（门派/副业的「显示所有按钮」）AND 本技能没有隐藏该按钮。
+const SECT_SKILL_BTN_OPTS = [
+  { key: 'learn', label: '学习' },
+  { key: 'upgrade', label: '升级' },
+  { key: 'use', label: '使用' },
+  { key: 'transfer', label: '传授' },
+];
+const SIDEJOB_SKILL_BTN_OPTS = [
+  { key: 'cultivate', label: '修炼' },
+  { key: 'use', label: '使用' },
+  { key: 'discard', label: '删除' },
+  { key: 'transfer', label: '传授' },
+];
+function hideBtnsEditorHtml(idPrefix, opts, cur) {
+  const arr = Array.isArray(cur) ? cur : [];
+  return `<div class="form-row full"><div><label>单独隐藏按钮（勾选 = 该技能玩家端不显示这个按钮）</label>
+    <div style="display:flex;flex-wrap:wrap;gap:1.5vw 2.5vw;padding:1vw 0;">
+      ${opts.map(o => `<label style="display:inline-flex;align-items:center;gap:1vw;margin:0;padding:1.2vw 2.2vw;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);font-size:2.7vw;font-weight:600;color:#fff;cursor:pointer;">
+        <input type="checkbox" id="${idPrefix}_${o.key}" ${arr.indexOf(o.key) >= 0 ? 'checked' : ''} style="width:3.6vw;height:3.6vw;max-width:20px;max-height:20px;cursor:pointer;accent-color:#ffd700;">
+        <span>${o.label}</span>
+      </label>`).join('')}
+    </div>
+    <div class="muted" style="font-size:2.3vw;line-height:1.6;">只隐藏按钮，不影响技能本身；不勾选 = 显示。还要同时满足门派/副业里的「显示所有按钮」开关。</div>
+    ${BACKEND_HAS_HIDE_BTNS === false ? '<div style="margin-top:1vw;font-size:2.4vw;color:#ff6b6b;font-weight:700;">⚠ 当前云函数未更新，勾选不会保存。请重新部署 backend/index.js。</div>' : ''}
+  </div></div>`;
+}
+function readHideBtns(idPrefix, opts) {
+  const out = [];
+  opts.forEach(o => {
+    const el = document.getElementById(idPrefix + '_' + o.key);
+    if (el && el.checked) out.push(o.key);
+  });
+  return out;
+}
+function hideBtnsText(hideBtns, opts) {
+  const arr = Array.isArray(hideBtns) ? hideBtns : [];
+  if (!arr.length) return '无';
+  return arr.map(k => {
+    const o = opts.find(x => x.key === k);
+    return o ? o.label : k;
+  }).join(' / ');
+}
+
 async function manageSidejobSkills(sidejobId, sidejobName) {
   _SJ_SKILL_CACHE_NAME = sidejobId + '|' + (sidejobName || '');
+  _SJ_SKILL_NAME = sidejobName || '';
   const r = await api('/api/admin/sidejobSkillList', { method: 'POST', body: JSON.stringify({ sidejob_id: sidejobId }) });
   const skills = (r.ok && r.skills) ? r.skills : [];
   let html = `<div class="muted" style="margin-bottom:2vw;">副业【${escapeHtml(sidejobName)}】下的技能</div>`;
@@ -3830,7 +3892,8 @@ async function manageSidejobSkills(sidejobId, sidejobName) {
           <span style="margin-right:2vw;">消耗 ${s.cost_item_id ? escapeHtml(s.cost_item_id) + '×' + (s.cost_item_qty||1) : '无'}</span>
           <span style="margin-right:2vw;">获得 +${s.gain_qty||1}</span>
           <span style="margin-right:2vw;">可转移 ${s.transferrable ? '✓' : '✗'}</span>
-          <span>升级按钮 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+          <span style="margin-right:2vw;">修炼总开关 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+          <span>单独隐藏 ${escapeHtml(hideBtnsText(s.hide_btns, SIDEJOB_SKILL_BTN_OPTS))}</span>
         </div>
       </div>`;
     });
@@ -3854,6 +3917,7 @@ function showCreateSidejobSkill(sidejobId) {
         <div><label>消耗道具数量</label><input id="sjt_cost_qty" type="number" value="1"></div></div>
       <div class="form-row"><div><label>修炼后可获得技能数量</label><input id="sjt_gain_qty" type="number" value="1"></div>
         <div><label>是否可转移好友</label><select id="sjt_trans"><option value="false">否</option><option value="true">是</option></select></div></div>
+      ${hideBtnsEditorHtml('sjt_hide', SIDEJOB_SKILL_BTN_OPTS, [])}
     `, async () => {
       const id = $("sjt_id").value.trim(), name = $("sjt_name").value.trim();
       if (!id || !name) return toast('ID 和名称必填', 'err');
@@ -3866,6 +3930,7 @@ function showCreateSidejobSkill(sidejobId) {
         cost_item_qty: parseInt($("sjt_cost_qty").value) || 1,
         gain_qty: parseInt($("sjt_gain_qty").value) || 1,
         transferrable: $("sjt_trans").value === 'true',
+        hide_btns: readHideBtns('sjt_hide', SIDEJOB_SKILL_BTN_OPTS),
       };
       const r = await api('/api/admin/createSidejobSkill', { method: 'POST', body: JSON.stringify(fields) });
       if (r.error) return toast(r.error, 'err');
@@ -3915,7 +3980,7 @@ async function editSidejobSkill(skillId) {
     if (!s) return toast('技能不存在', 'err');
     window._esjtTags = Array.isArray(s.tags) ? s.tags.slice(0, 8) : [];
     showModal('编辑副业技能：' + escapeHtml(s.name), `
-      <div class="form-row"><div><label>技能 ID（可修改）</label><input id="esjt_id" value="${escapeHtml(s.id||'')}" placeholder="修改 ID 会重命名记录"></div>
+      <div class="form-row"><div><label>技能 ID（可修改，会迁移玩家进度）</label><input id="esjt_id" value="${escapeHtml(s.id||'')}" placeholder="修改 ID 会同步迁移玩家修炼次数"></div>
         <div><label>副业 ID</label><input value="${escapeHtml(s.sidejob_id||'')}" disabled></div></div>
       <div class="form-row"><div><label>名称</label><input id="esjt_name" value="${escapeHtml(s.name||'')}"></div>
         <div><label>描述</label><input id="esjt_desc" value="${escapeHtml(s.desc||'')}"></div></div>
@@ -3926,8 +3991,9 @@ async function editSidejobSkill(skillId) {
         <div><label>消耗数量</label><input id="esjt_cost_qty" type="number" value="${s.cost_item_qty||1}"></div></div>
       <div class="form-row"><div><label>修炼后可获得数量</label><input id="esjt_gain_qty" type="number" value="${s.gain_qty||1}"></div>
         <div><label>是否可转移好友</label><select id="esjt_trans"><option value="true"${s.transferrable?' selected':''}>是</option><option value="false"${!s.transferrable?' selected':''}>否</option></select></div></div>
-      <div class="form-row"><div><label>显示升级按钮（玩家端可见）</label><select id="esjt_show"><option value="true"${(s.show_upgrade!==false)?' selected':''}>✅ 显示</option><option value="false"${s.show_upgrade===false?' selected':''}>🚫 隐藏</option></select></div>
+      <div class="form-row"><div><label>修炼按钮总开关（与下面单独隐藏任一关闭即隐藏）</label><select id="esjt_show"><option value="true"${(s.show_upgrade!==false)?' selected':''}>✅ 显示</option><option value="false"${s.show_upgrade===false?' selected':''}>🚫 隐藏</option></select></div>
         <div><label>复制技能</label><button class="mini-op green" id="esjt_copy_btn">📋 复制一个（ID 自动 +_copy+1）</button></div></div>
+      ${hideBtnsEditorHtml('esjt_hide', SIDEJOB_SKILL_BTN_OPTS, s.hide_btns)}
       <div class="form-row full"><div><label>自定义标签（显示在技能名称后面 · 金色底咖啡色字）</label>
         <div id="esjt_tags" style="margin-bottom:1.4vw;"></div>
         <div style="display:flex;gap:1.5vw;align-items:flex-start;">
@@ -3948,18 +4014,20 @@ async function editSidejobSkill(skillId) {
         gain_qty: parseInt($("esjt_gain_qty").value) || 1,
         transferrable: $("esjt_trans").value === 'true',
         show_upgrade: $("esjt_show").value === 'true',
+        hide_btns: readHideBtns('esjt_hide', SIDEJOB_SKILL_BTN_OPTS),
         tags: (window._esjtTags || []).slice(),
         note: $("esjt_note").value.trim(),
       };
       const newIdVal = $("esjt_id").value.trim();
       const targetId = newIdVal || skillId;
       if (targetId !== skillId) {
-        const createFields = { id: targetId, sidejob_id: s.sidejob_id, ...fields };
-        const cr = await api('/api/admin/createSidejobSkill', { method: 'POST', body: JSON.stringify(createFields) });
-        if (cr.error) return toast('修改 ID 失败：' + cr.error, 'err');
-        const dr = await api('/api/admin/deleteSidejobSkill', { method: 'POST', body: JSON.stringify({ id: skillId }) });
-        if (dr.error) return toast('删除旧 ID 失败：' + dr.error, 'err');
-        toast('已更新（含 ID 修改）');
+        // ★ 旧后端没有 rename 接口，直接提示，避免 404
+        if (BACKEND_HAS_RENAME_SKILL === false) return toast('云函数未更新，不支持无损改 ID；请先重新部署 backend/index.js', 'err');
+        // ★ 走 rename 接口：同步迁移 player_sidejob_skills.skill_id，保留玩家修炼次数
+        if (!await uiConfirm('确认修改技能 ID？会同步迁移所有玩家在该技能上的修炼次数，不会清空。')) return;
+        const rr = await api('/api/admin/renameSidejobSkill', { method: 'POST', body: JSON.stringify({ id: skillId, new_id: targetId, fields }) });
+        if (rr.error) return toast('修改 ID 失败：' + rr.error, 'err');
+        toast(`已更新（ID → ${targetId}，迁移 ${rr.migrated || 0} 条修炼记录）`);
       } else {
         const r2 = await api('/api/admin/updateSidejobSkill', { method: 'POST', body: JSON.stringify({ id: skillId, fields }) });
         if (r2.error) return toast(r2.error, 'err');
@@ -3967,7 +4035,7 @@ async function editSidejobSkill(skillId) {
       }
       closeModal();
       // 关键：不关管理技能窗口，只刷新当前副业的技能列表
-      manageSidejobSkills(s.sidejob_id, _SJ_SKILL_CACHE_NAME || '');
+      manageSidejobSkills(s.sidejob_id, _SJ_SKILL_NAME || '');
     }, '保存');
     setTimeout(() => {
       const copyBtn = $('esjt_copy_btn');
@@ -3975,7 +4043,7 @@ async function editSidejobSkill(skillId) {
         const r = await api('/api/admin/copySidejobSkill', { method: 'POST', body: JSON.stringify({ src_id: skillId }) });
         if (r.error) return toast(r.error, 'err');
         toast(`已复制为 ${r.new_id}`);
-        manageSidejobSkills(s.sidejob_id, _SJ_SKILL_CACHE_NAME || '');
+        manageSidejobSkills(s.sidejob_id, _SJ_SKILL_NAME || '');
       };
       // 自定义标签：先渲染已有标签，再绑定"添加"按钮和回车
       esjtRenderTags();
@@ -4385,9 +4453,14 @@ async function unbindSectPlayer(sectId) {
 // 全局缓存当前打开的门派名（编辑/复制技能后用此缓存刷新"管理技能"窗口）
 let _SECT_SKILL_CACHE_NAME = '';
 let _SJ_SKILL_CACHE_NAME = '';
+// ★ 单独存技能管理窗口的显示名：之前把整个 "sectId|门派名" 缓存串当成名字传回去，
+//   每保存一次标题就变成 "s1|s1|少林"，越滚越长。这里改成独立变量，缓存串只用来取 ID。
+let _SECT_SKILL_NAME = '';
+let _SJ_SKILL_NAME = '';
 
 async function manageSectSkills(sectId, sectName) {
   _SECT_SKILL_CACHE_NAME = sectId + '|' + (sectName || '');
+  _SECT_SKILL_NAME = sectName || '';
   const r = await api('/api/admin/sectSkillList', { method: 'POST', body: JSON.stringify({ sect_id: sectId }) });
   const skills = (r.ok && r.skills) ? r.skills : [];
   let html = `<div class="muted" style="margin-bottom:2vw;">门派【${escapeHtml(sectName)}】下的技能</div>`;
@@ -4410,7 +4483,8 @@ async function manageSectSkills(sectId, sectName) {
           <span style="margin-right:2vw;">使用蓝条 ${s.blue_cost||0}</span>
           <span style="margin-right:2vw;">升级消耗 ${s.upgrade_cost_item_id ? escapeHtml(s.upgrade_cost_item_id) + '×' + (s.upgrade_cost_item_qty||1) : '无'}${s.upgrade_blue_cost ? ' +蓝' + s.upgrade_blue_cost : ''}</span>
           <span style="margin-right:2vw;">可转移 ${s.transferrable ? '✓' : '✗'}</span>
-          <span>升级按钮 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+          <span style="margin-right:2vw;">升级总开关 ${s.show_upgrade===false ? '🚫 隐藏' : '✅ 显示'}</span>
+          <span>单独隐藏 ${escapeHtml(hideBtnsText(s.hide_btns, SECT_SKILL_BTN_OPTS))}</span>
         </div>
       </div>`;
     });
@@ -4449,6 +4523,7 @@ function showCreateSectSkill(sectId) {
         <div><label>升级消耗道具数量</label><input id="sk_up_qty" type="number" value="1" placeholder="0"></div></div>
       <div class="form-row"><div><label>升级额外扣蓝条</label><input id="sk_up_blue" type="number" placeholder="0"></div>
         <div><label>可转移好友</label><select id="sk_trans"><option value="false">否</option><option value="true">是</option></select></div></div>
+      ${hideBtnsEditorHtml('sk_hide', SECT_SKILL_BTN_OPTS, [])}
     `, async () => {
       const id = $("sk_id").value.trim(), name = $("sk_name").value.trim();
       if (!id || !name) return toast('ID 和名称必填', 'err');
@@ -4462,6 +4537,7 @@ function showCreateSectSkill(sectId) {
         upgrade_cost_item_qty: parseInt($("sk_up_qty").value) || 1,
         upgrade_blue_cost: parseInt($("sk_up_blue").value) || 0,
         transferrable: $("sk_trans").value === 'true',
+        hide_btns: readHideBtns('sk_hide', SECT_SKILL_BTN_OPTS),
       };
       const r = await api('/api/admin/createSectSkill', { method: 'POST', body: JSON.stringify(fields) });
       if (r.error) return toast(r.error, 'err');
@@ -4512,7 +4588,7 @@ async function editSectSkill(skillId) {
     window._esknTags = Array.isArray(s.tags) ? s.tags.slice(0, 8) : [];
     // 显示当前保存的记录，可修改后保存
     showModal('编辑技能：' + escapeHtml(s.name), `
-      <div class="form-row"><div><label>技能 ID（可修改）</label><input id="eskn_id" value="${escapeHtml(s.id||'')}" placeholder="修改 ID 会重命名记录"></div>
+      <div class="form-row"><div><label>技能 ID（可修改，会迁移玩家进度）</label><input id="eskn_id" value="${escapeHtml(s.id||'')}" placeholder="修改 ID 会同步迁移玩家学习记录"></div>
         <div><label>门派 ID</label><input value="${escapeHtml(s.sect_id||'')}" disabled></div></div>
       <div class="form-row"><div><label>名称</label><input id="eskn_name" value="${escapeHtml(s.name||'')}"></div>
         <div><label>描述</label><input id="eskn_desc" value="${escapeHtml(s.desc||'')}"></div></div>
@@ -4523,8 +4599,9 @@ async function editSectSkill(skillId) {
         <div><label>升级消耗道具数量</label><input id="eskn_up_qty" type="number" value="${s.upgrade_cost_item_qty||1}" placeholder="0"></div></div>
       <div class="form-row"><div><label>升级额外扣蓝条</label><input id="eskn_up_blue" type="number" value="${s.upgrade_blue_cost||0}"></div>
         <div><label>可转移</label><select id="eskn_trans"><option value="true"${s.transferrable?' selected':''}>是</option><option value="false"${!s.transferrable?' selected':''}>否</option></select></div></div>
-      <div class="form-row"><div><label>显示升级按钮（玩家端可见）</label><select id="eskn_show"><option value="true"${(s.show_upgrade!==false)?' selected':''}>✅ 显示</option><option value="false"${s.show_upgrade===false?' selected':''}>🚫 隐藏</option></select></div>
+      <div class="form-row"><div><label>升级按钮总开关（与下面单独隐藏任一关闭即隐藏）</label><select id="eskn_show"><option value="true"${(s.show_upgrade!==false)?' selected':''}>✅ 显示</option><option value="false"${s.show_upgrade===false?' selected':''}>🚫 隐藏</option></select></div>
         <div><label>复制技能</label><button class="mini-op green" id="eskn_copy_btn">📋 复制一个（ID 自动 +_copy+1）</button></div></div>
+      ${hideBtnsEditorHtml('eskn_hide', SECT_SKILL_BTN_OPTS, s.hide_btns)}
       <div class="form-row full"><div><label>自定义标签（显示在技能名称后面 · 金色底咖啡色字）</label>
         <div id="eskn_tags" style="margin-bottom:1.4vw;"></div>
         <div style="display:flex;gap:1.5vw;align-items:flex-start;">
@@ -4546,19 +4623,20 @@ async function editSectSkill(skillId) {
       fields.upgrade_blue_cost = parseInt($("eskn_up_blue").value) || 0;
       fields.transferrable = ($("eskn_trans").value === 'true');
       fields.show_upgrade = ($("eskn_show").value === 'true');
+      fields.hide_btns = readHideBtns('eskn_hide', SECT_SKILL_BTN_OPTS);
       fields.tags = (window._esknTags || []).slice();
       fields.note = $("eskn_note").value.trim();
       const newIdVal = $("eskn_id").value.trim();
       // 如果改了 ID → 先创建新记录，再删旧记录（这里只用 update，如果 ID 改了会失败提示用户）
       const targetId = newIdVal || skillId;
       if (targetId !== skillId) {
-        // 改 ID：先创建新记录，再删旧记录
-        const createFields = { id: targetId, sect_id: s.sect_id, ...fields };
-        const cr = await api('/api/admin/createSectSkill', { method: 'POST', body: JSON.stringify(createFields) });
-        if (cr.error) return toast('修改 ID 失败：' + cr.error, 'err');
-        const dr = await api('/api/admin/deleteSectSkill', { method: 'POST', body: JSON.stringify({ id: skillId }) });
-        if (dr.error) return toast('删除旧 ID 失败：' + dr.error, 'err');
-        toast('已更新（含 ID 修改）');
+        // ★ 旧后端没有 rename 接口，直接提示，避免 404
+        if (BACKEND_HAS_RENAME_SKILL === false) return toast('云函数未更新，不支持无损改 ID；请先重新部署 backend/index.js', 'err');
+        // ★ 走 rename 接口：同步迁移 player_skills.skill_id，不再“新建 + 删旧”清空玩家等级
+        if (!await uiConfirm('确认修改技能 ID？会同步迁移所有玩家在该技能上的学习记录，不会清空等级。')) return;
+        const rr = await api('/api/admin/renameSectSkill', { method: 'POST', body: JSON.stringify({ id: skillId, new_id: targetId, fields }) });
+        if (rr.error) return toast('修改 ID 失败：' + rr.error, 'err');
+        toast(`已更新（ID → ${targetId}，迁移 ${rr.migrated || 0} 条学习记录）`);
       } else {
         const r = await api('/api/admin/updateSectSkill', { method: 'POST', body: JSON.stringify({ id: skillId, fields }) });
         if (r.error) return toast(r.error, 'err');
@@ -4566,7 +4644,7 @@ async function editSectSkill(skillId) {
       }
       closeModal();
       // 关键修复：不关管理技能窗口，只刷新当前门派的技能列表
-      manageSectSkills(s.sect_id, _SECT_SKILL_CACHE_NAME || '');
+      manageSectSkills(s.sect_id, _SECT_SKILL_NAME || '');
     }, '保存');
     // 绑定复制按钮（独立事件，不走 onOk）
     setTimeout(() => {
@@ -4576,7 +4654,7 @@ async function editSectSkill(skillId) {
         if (r.error) return toast(r.error, 'err');
         toast(`已复制为 ${r.new_id}`);
         // 不关当前窗口，但刷新技能列表
-        manageSectSkills(s.sect_id, _SECT_SKILL_CACHE_NAME || '');
+        manageSectSkills(s.sect_id, _SECT_SKILL_NAME || '');
       };
       // 自定义标签：渲染 + 绑定添加按钮
       esknRenderTags();
@@ -4594,7 +4672,7 @@ async function deleteSectSkill(id) {
   const r = await api('/api/admin/deleteSectSkill', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
   toast('已删除');
-  if (_SECT_SKILL_CACHE_NAME) manageSectSkills(_SECT_SKILL_CACHE_NAME.split('|')[0] || '', _SECT_SKILL_CACHE_NAME.split('|')[1] || '');
+  if (_SECT_SKILL_CACHE_NAME) manageSectSkills(_SECT_SKILL_CACHE_NAME.split('|')[0] || '', _SECT_SKILL_NAME || '');
   else loadSectAdmin();
 }
 
@@ -4788,7 +4866,7 @@ async function copySectSkill(srcId) {
   const r = await api('/api/admin/copySectSkill', { method: 'POST', body: JSON.stringify({ src_id: srcId }) });
   if (r.error) return toast(r.error, 'err');
   toast(`已复制为 ${r.new_id}`);
-  if (_SECT_SKILL_CACHE_NAME) manageSectSkills(_SECT_SKILL_CACHE_NAME.split('|')[0] || '', _SECT_SKILL_CACHE_NAME.split('|')[1] || '');
+  if (_SECT_SKILL_CACHE_NAME) manageSectSkills(_SECT_SKILL_CACHE_NAME.split('|')[0] || '', _SECT_SKILL_NAME || '');
   else loadSectAdmin();
 }
 // 删除副业技能（保持窗口打开）
@@ -4797,7 +4875,7 @@ async function deleteSidejobSkill(id) {
   const r = await api('/api/admin/deleteSidejobSkill', { method: 'POST', body: JSON.stringify({ id }) });
   if (r.error) return toast(r.error, 'err');
   toast('已删除');
-  if (_SJ_SKILL_CACHE_NAME) manageSidejobSkills(_SJ_SKILL_CACHE_NAME.split('|')[0] || '', _SJ_SKILL_CACHE_NAME.split('|')[1] || '');
+  if (_SJ_SKILL_CACHE_NAME) manageSidejobSkills(_SJ_SKILL_CACHE_NAME.split('|')[0] || '', _SJ_SKILL_NAME || '');
   else loadSidejobAdmin();
 }
 // 复制副业技能（保持窗口打开）
@@ -4805,7 +4883,7 @@ async function copySidejobSkill(srcId) {
   const r = await api('/api/admin/copySidejobSkill', { method: 'POST', body: JSON.stringify({ src_id: srcId }) });
   if (r.error) return toast(r.error, 'err');
   toast(`已复制为 ${r.new_id}`);
-  if (_SJ_SKILL_CACHE_NAME) manageSidejobSkills(_SJ_SKILL_CACHE_NAME.split('|')[0] || '', _SJ_SKILL_CACHE_NAME.split('|')[1] || '');
+  if (_SJ_SKILL_CACHE_NAME) manageSidejobSkills(_SJ_SKILL_CACHE_NAME.split('|')[0] || '', _SJ_SKILL_NAME || '');
   else loadSidejobAdmin();
 }
 
