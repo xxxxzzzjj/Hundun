@@ -3715,9 +3715,9 @@ async function deleteSidejob(id, name) {
 async function bindSidejobPlayer(sidejobId, sidejobName) {
   const r = await api('/api/admin/giveItemList');
   if (!r.ok || !r.players || !r.players.length) return toast('暂无玩家', 'err');
-  // 过滤已绑定的玩家
+  // 过滤已永久绑定的玩家；临时绑定玩家仍应出现在列表里，点绑定 = 升级为永久
   const bindRes = await api('/api/admin/allPlayerSidejobBinds');
-  const boundIds = new Set(((bindRes.ok && bindRes.binds) || []).filter(b => b.sidejob_id === sidejobId).map(b => b.player_id));
+  const boundIds = new Set(((bindRes.ok && bindRes.binds) || []).filter(b => b.sidejob_id === sidejobId && !b.temporary).map(b => b.player_id));
   const candidates = r.players.filter(p => !boundIds.has(p.id));
   if (!candidates.length) return toast('所有玩家都已绑定该副业', 'err');
   let html = '<div style="display:flex;flex-direction:column;gap:1.5vw;max-height:60vh;overflow-y:auto;">';
@@ -3735,7 +3735,7 @@ async function bindSidejobPlayer(sidejobId, sidejobName) {
         if (!await uiConfirm(`确认将 ${btn.dataset.pname} 绑定到副业【${sidejobName}】？`)) return;
         const r2 = await api('/api/admin/bindSidejob', { method: 'POST', body: JSON.stringify({ player_id: btn.dataset.pid, sidejob_id: sidejobId }) });
         if (r2.error) return toast(r2.error, 'err');
-        toast(`已绑定 ${btn.dataset.pname}`); closeModal();
+        toast(r2.upgraded ? `已把 ${btn.dataset.pname} 的临时副业升级为永久` : `已绑定 ${btn.dataset.pname}`); closeModal();
       };
     });
   }, 50);

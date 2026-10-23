@@ -9381,11 +9381,12 @@ async function showSkills() {
 
         const opacity = greyed ? 'opacity:.45;' : '';
 
-        // ★ 后台「副业管理」里可以分别开关：显示 LV / 显示次数 / 显示所有按钮。
-        //   三个都关 → 这里只剩技能名称和效果，其他什么都不显示。
-        const _showLv = sj.show_lv !== false;
-        const _showCount = sj.show_count !== false;
-        const _showBtns = sj.show_buttons !== false;
+        // ★ 临时副业：只显示被赠送的技能，强制显示次数/使用/删除，不显示 LV/修炼/传授。
+        //   后台组开关和 hide_btns 对临时组不生效（服务端也放行使用/删除）。
+        const _isTemp = !!sj.temporary;
+        const _showLv = !_isTemp && sj.show_lv !== false;
+        const _showCount = _isTemp || sj.show_count !== false;
+        const _showBtns = _isTemp || sj.show_buttons !== false;
         // ★ LV 和次数合成同一栏，跟在技能名称后面
         const lvTag = [
           _showLv ? (s.lv_required ? `Lv.${s.lv_required}+` : 'Lv.不限') : '',
@@ -9436,13 +9437,13 @@ async function showSkills() {
 
             <div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:34vw;">
 
-              ${(_showBtns && s.show_upgrade !== false && !_isSkillBtnHidden(s, 'cultivate') && showCultivate) ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
+              ${(!_isTemp && _showBtns && s.show_upgrade !== false && !_isSkillBtnHidden(s, 'cultivate') && showCultivate) ? `<button onclick="cultivateSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}','${escapeHtml(costItemId)}','${escapeHtml(costItemName)}',${costQty},${gainQty})" style="padding:1.5vw 2.5vw;background:rgba(192,132,252,.2);border:1px solid #c084fc;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">修炼</button>` : ''}
 
-              ${(_showBtns && !_isSkillBtnHidden(s, 'use') && s.count >= 1) ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
+              ${((_isTemp || _showBtns) && (_isTemp || !_isSkillBtnHidden(s, 'use')) && s.count >= 1) ? `<button onclick="useSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}',${parseInt(s.count) || 0})" style="padding:1.5vw 2.5vw;background:rgba(46,232,78,.2);border:1px solid #2ee84e;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">使用</button>` : ''}
 
-              ${(_showBtns && !_isSkillBtnHidden(s, 'discard') && s.count >= 1) ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
+              ${((_isTemp || _showBtns) && (_isTemp || !_isSkillBtnHidden(s, 'discard')) && s.count >= 1) ? `<button onclick="discardSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">删除</button>` : ''}
 
-              ${(_showBtns && !_isSkillBtnHidden(s, 'transfer') && s.count >= 1 && s.transferrable) ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
+              ${(!_isTemp && _showBtns && !_isSkillBtnHidden(s, 'transfer') && s.count >= 1 && s.transferrable) ? `<button onclick="transferSidejobSkill('${escapeHtml(s.id)}','${escapeHtml(s.name)}')" style="padding:1.5vw 2.5vw;background:rgba(255,215,0,.2);border:1px solid #ffd700;color:#fff;border-radius:5px;font-size:2.8vw;cursor:pointer;">传授</button>` : ''}
 
             </div>
 
@@ -9454,13 +9455,17 @@ async function showSkills() {
 
       const slice2 = pagerSlice(pageKey);
 
-      const wrapCls = 'collapse-wrap' + (sj.collapsed ? ' collapsed' : '');
+      const wrapCls = 'collapse-wrap' + ((sj.collapsed && !sj.temporary) ? ' collapsed' : '');
+
+      const tempBadge = sj.temporary
+        ? ' <span style="display:inline-block;background:linear-gradient(180deg,#ffb74d,#e67e22);color:#3a2100;font-size:2.25vw;font-weight:800;padding:.25vw 1.2vw;border-radius:99px;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">临时</span>'
+        : '';
 
       html += `<div class="${wrapCls}" data-ck="sj_${escapeHtml(sj.id || sj.name || '')}" style="margin-bottom:3vw;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.3);border-radius:8px;padding:2vw;">
 
         <div class="collapse-head" onclick="_skillCkToggle(this,'sj_${escapeHtml(sj.id || sj.name || '')}')" style="font-weight:bold;color:${escapeHtml(sj.title_color || '#c084fc')};font-size:3.6vw;cursor:pointer;">
 
-          <span>${escapeHtml(sj.name)}${sj.note ? ` <span style="font-size:2.6vw;color:rgba(255,255,255,.5);font-weight:normal;">${escapeHtml(sj.note)}</span>` : ''}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sj.skills||[]).length}）</span></span>
+          <span>${escapeHtml(sj.name)}${tempBadge}${sj.note ? ` <span style="font-size:2.6vw;color:rgba(255,255,255,.5);font-weight:normal;">${escapeHtml(sj.note)}</span>` : ''}<span style="color:rgba(255,255,255,.5);font-size:2.8vw;font-weight:normal;">（${(sj.skills||[]).length}）</span></span>
 
           <span class="collapse-arrow">▼</span>
 
@@ -9752,6 +9757,8 @@ async function transferSidejobSkill(skillId, skillName) {
 
     <div style="font-size:3vw;color:rgba(255,255,255,.6);margin-bottom:2vw;">输入要传授的次数（你的次数会减去该数量）</div>
 
+    <div style="font-size:2.6vw;color:#ffb74d;line-height:1.6;margin-bottom:2vw;">若对方还没习得该副业，会作为<b>临时技能</b>赠送：对方只能使用/删除，临时技能全部用完/删除后自动失去这个副业。</div>
+
     <div class="form-row full"><div><label>传授次数</label><input id="tr_qty" type="number" value="1" min="1"></div></div>
 
   `, async () => {
@@ -9800,7 +9807,9 @@ async function transferSidejobSkill(skillId, skillName) {
 
           if (r.error) return toast(r.error, 'err');
 
-          toast(`已传授给【${btn.dataset.fname}】（你的剩余 ${r.remaining}）`, 'ok', 1500);
+          toast(r.temporary
+            ? `已作为【临时技能】送给【${btn.dataset.fname}】（临时技能全部用完/删除后消失）`
+            : `已传授给【${btn.dataset.fname}】（你的剩余 ${r.remaining}）`, 'ok', 1800);
 
           closeModal();
 
