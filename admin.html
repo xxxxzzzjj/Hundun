@@ -1818,8 +1818,7 @@ function renderPlayerList() {
         <button class="row-op code" style="background:rgba(255,140,0,.2);border:1px solid #ff8c00;" onclick="openEditDmPanel('${safeId}','${safeDm}','${safeName}')">🔑改DM</button>
         <button class="row-op code" onclick="setPlayerOrderPrompt('${safeId}',${so})">#顺序</button>
         <button class="row-op code" onclick="openPlayerInventoryPanel('${safeId}','${safeName}')">🎒背包</button>
-        <button class="row-op code" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;" onclick="showPlayerCultivation('${safeId}','${safeName}')">🧘 修行灵力</button>
-        <button class="row-op code" style="background:rgba(192,132,252,.18);border:1px solid #c084fc;" onclick="openPlayerBindingsPanel('${safeId}')">📜 门派/副业</button>
+        <button class="row-op code" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;" onclick="showPlayerCultivation('${safeId}','${safeName}')">🧘 修行 / 门派副业</button>
         <button class="row-op code" style="background:rgba(255,77,90,.18);border:1px solid #ff4d5a;" onclick="openPlayerPinPanel('${safeId}','${safeName}')">🔐 口令</button>
         <button class="row-op code" onclick="openTransferPlayerPanel('${safeId}','${safeName}')">📍改位置</button>
         <button class="row-op code" onclick="openBindTitlePanel('${safeId}','${safeName}')">📛+称号</button>
@@ -2158,7 +2157,8 @@ async function showPlayerCultivation(id, name) {
             + '<div style="flex:1;min-width:0;">'
             + '<div style="font-size:2.9vw;color:' + c + ';font-weight:bold;">' + (s.unlocked ? '✅ ' : '🔒 ') + escapeHtml(s.name) + '</div>'
             + '<div style="font-size:2.3vw;color:rgba(255,255,255,.4);font-family:monospace;word-break:break-all;">ID: ' + escapeHtml(s.id) + '</div>'
-            + (s.desc ? '<div style="font-size:2.3vw;color:rgba(255,255,255,.5);margin-top:.4vw;">' + escapeHtml(s.desc) + '</div>' : '')
+            + (s.effect_desc ? '<div style="font-size:2.35vw;color:#ffd766;margin-top:.5vw;line-height:1.45;">⚡ 效果：' + escapeHtml(s.effect_desc) + '</div>' : '')
+            + (s.desc ? '<div style="font-size:2.3vw;color:rgba(255,255,255,.5);margin-top:.35vw;line-height:1.45;">说明：' + escapeHtml(s.desc) + '</div>' : '')
             + '</div>'
             + '<div style="text-align:right;flex-shrink:0;font-size:2.5vw;line-height:1.7;color:rgba(255,255,255,.6);">'
             + '<div>等级 <b style="color:#ffd700;">Lv.' + (s.level || 0) + '</b></div>'
@@ -2196,6 +2196,8 @@ async function showPlayerCultivation(id, name) {
             + '<div style="flex:1;min-width:0;">'
             + '<div style="font-size:2.9vw;color:' + c + ';font-weight:bold;">' + (cnt > 0 ? '✅ ' : '🔒 ') + escapeHtml(s.name) + '</div>'
             + '<div style="font-size:2.3vw;color:rgba(255,255,255,.4);font-family:monospace;word-break:break-all;">ID: ' + escapeHtml(s.id) + '</div>'
+            + (s.effect_desc ? '<div style="font-size:2.35vw;color:#ffd766;margin-top:.5vw;line-height:1.45;">⚡ 效果：' + escapeHtml(s.effect_desc) + '</div>' : '')
+            + (s.desc ? '<div style="font-size:2.3vw;color:rgba(255,255,255,.5);margin-top:.35vw;line-height:1.45;">说明：' + escapeHtml(s.desc) + '</div>' : '')
             + '</div>'
             + '<div style="text-align:right;flex-shrink:0;font-size:2.5vw;line-height:1.7;color:rgba(255,255,255,.6);">'
             + '<div>剩余次数 <b style="color:' + c + ';font-size:3.4vw;">' + cnt + '</b></div>'
@@ -2211,7 +2213,66 @@ async function showPlayerCultivation(id, name) {
     });
   }
 
-  showModal('🧘 ' + (name || id) + ' 的修行灵力', body, function () { closeModal(); }, '关闭');
+  // ===== 门派/副业绑定管理（原「门派/副业」入口，合并到这里） =====
+  body += '<div style="font-size:3.4vw;color:#ffd700;font-weight:bold;margin:3vw 0 1.3vw;padding-top:2vw;border-top:1px dashed rgba(255,215,0,.25);">📜 门派 / 副业绑定管理</div>';
+  body += '<div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin-bottom:1.5vw;">已绑定：门派 <b style="color:#ffd700;">' + sects.length + '</b> 个 · 副业 <b style="color:#c084fc;">' + sidejobs.length + '</b> 个。可在这里编辑技能配置或解绑。</div>';
+  if (!sects.length) {
+    body += '<div class="empty" style="margin-bottom:1vw;">没有绑定任何门派</div>';
+  } else {
+    sects.forEach(function (sec) {
+      const list = sec.skills || [];
+      const unlockedN = list.filter(function (s) { return s.unlocked; }).length;
+      body += '<div style="display:flex;align-items:center;gap:2vw;justify-content:space-between;border:1px solid rgba(255,215,0,.25);border-radius:8px;padding:2vw;margin-bottom:1.2vw;background:rgba(255,215,0,.05);">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:3.05vw;font-weight:bold;color:#fff;">' + escapeHtml(sec.name)
+        + ' <span style="font-size:2.4vw;color:rgba(255,255,255,.45);font-weight:normal;">' + list.length + ' 个技能 · 已解锁 ' + unlockedN + '/' + list.length + '</span></div>'
+        + '<div style="font-size:2.3vw;color:rgba(255,255,255,.35);font-family:monospace;margin-top:.3vw;">ID: ' + escapeHtml(sec.id) + '</div></div>'
+        + '<div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
+        + '<button class="mini-op cult-sect-edit" data-sid="' + escapeHtml(sec.id) + '" data-sname="' + escapeHtml(sec.name) + '" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;">✏️ 编辑技能</button>'
+        + '<button class="mini-op cult-sect-unbind" data-pid="' + escapeHtml(id) + '" data-pname="' + escapeHtml(name || id) + '" data-sid="' + escapeHtml(sec.id) + '" data-sname="' + escapeHtml(sec.name) + '" style="background:rgba(230,40,54,.18);border:1px solid #e62836;">解绑</button>'
+        + '</div></div>';
+    });
+  }
+  if (!sidejobs.length) {
+    body += '<div class="empty" style="margin-bottom:1vw;">没有绑定任何副业</div>';
+  } else {
+    sidejobs.forEach(function (sj) {
+      const list = sj.skills || [];
+      const total = list.reduce(function (a, s) { return a + (parseInt(s.count) || 0); }, 0);
+      const tempTag = sj.temporary ? ' <span style="display:inline-block;background:linear-gradient(180deg,#ffb74d,#e67e22);color:#3a2100;font-size:2.2vw;font-weight:800;padding:.2vw 1.1vw;border-radius:99px;vertical-align:middle;">临时</span>' : '';
+      body += '<div style="display:flex;align-items:center;gap:2vw;justify-content:space-between;border:1px solid rgba(192,132,252,.25);border-radius:8px;padding:2vw;margin-bottom:1.2vw;background:rgba(192,132,252,.05);">'
+        + '<div style="flex:1;min-width:0;"><div style="font-size:3.05vw;font-weight:bold;color:#fff;">' + escapeHtml(sj.name) + tempTag
+        + ' <span style="font-size:2.4vw;color:rgba(255,255,255,.45);font-weight:normal;">' + list.length + ' 个技能 · 剩余次数 ' + total + '</span></div>'
+        + '<div style="font-size:2.3vw;color:rgba(255,255,255,.35);font-family:monospace;margin-top:.3vw;">ID: ' + escapeHtml(sj.id) + '</div></div>'
+        + '<div style="display:flex;gap:1vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
+        + '<button class="mini-op cult-sj-edit" data-sjid="' + escapeHtml(sj.id) + '" data-sjname="' + escapeHtml(sj.name) + '" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;">✏️ 编辑技能</button>'
+        + '<button class="mini-op cult-sj-unbind" data-pid="' + escapeHtml(id) + '" data-pname="' + escapeHtml(name || id) + '" data-sjid="' + escapeHtml(sj.id) + '" data-sjname="' + escapeHtml(sj.name) + '" style="background:rgba(230,40,54,.18);border:1px solid #e62836;">解绑</button>'
+        + '</div></div>';
+    });
+  }
+
+  showModal('🧘 ' + (name || id) + ' 的修行 / 门派副业', body, function () { closeModal(); }, '关闭');
+  setTimeout(function () {
+    document.querySelectorAll('#modal .cult-sect-edit').forEach(function (btn) {
+      btn.onclick = function () { openPlayerSectEditor(btn.dataset.sid, btn.dataset.sname); };
+    });
+    document.querySelectorAll('#modal .cult-sj-edit').forEach(function (btn) {
+      btn.onclick = function () { openPlayerSidejobEditor(btn.dataset.sjid, btn.dataset.sjname); };
+    });
+    document.querySelectorAll('#modal .cult-sect-unbind').forEach(function (btn) {
+      btn.onclick = async function () {
+        btn.disabled = true;
+        try { await unbindPlayerSect(btn.dataset.pid, btn.dataset.pname, btn.dataset.sid, btn.dataset.sname); }
+        finally { btn.disabled = false; }
+      };
+    });
+    document.querySelectorAll('#modal .cult-sj-unbind').forEach(function (btn) {
+      btn.onclick = async function () {
+        btn.disabled = true;
+        try { await unbindPlayerSidejob(btn.dataset.pid, btn.dataset.pname, btn.dataset.sjid, btn.dataset.sjname); }
+        finally { btn.disabled = false; }
+      };
+    });
+  }, 50);
 }
 
 // 后台直接增减玩家技能数量：门派 = 等级，副业 = 剩余次数
@@ -2369,7 +2430,7 @@ async function unbindPlayerSect(playerId, playerName, sectId, sectName) {
     pp.sect = '散人';
   }
   renderPlayerList();
-  await openPlayerBindingsPanel(playerId, playerName);
+  await showPlayerCultivation(playerId, playerName);
   if (typeof loadSectAdmin === 'function') loadSectAdmin();
 }
 
@@ -2378,7 +2439,7 @@ async function unbindPlayerSidejob(playerId, playerName, sidejobId, sidejobName)
   const r = await api('/api/admin/unbindSidejob', { method: 'POST', body: JSON.stringify({ player_id: playerId, sidejob_id: sidejobId }) });
   if (r.error) return toast(r.error, 'err');
   toast('已解绑副业：' + sidejobName, 'ok', 1600);
-  await openPlayerBindingsPanel(playerId, playerName);
+  await showPlayerCultivation(playerId, playerName);
   if (typeof loadSidejobAdmin === 'function') loadSidejobAdmin();
 }
 
