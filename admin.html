@@ -527,7 +527,10 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       </div>
       <textarea id="cfg_announcement_links" rows="6" oninput="renderAnnLinksPreview(this.value)" placeholder="官网|https://example.com&#10;玩家群|https://qm.qq.com/q/xxxx&#10;规则图|公告图.png&#10;地图说明|imgs/notice/map.jpg" style="width:100%;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:2vw;font-size:2.8vw;font-family:monospace;line-height:1.75;resize:vertical;"></textarea>
       <div id="annLinksPreview" style="margin-top:1.5vw;"></div>
-      <div class="muted" style="font-size:2.5vw;margin-top:1vw;">修改后统一点左上角「💾 保存全部」提交。</div>
+      <div style="display:flex;align-items:center;gap:2vw;margin-top:1.2vw;flex-wrap:wrap;">
+        <button class="action-btn green" style="width:auto;padding:1.8vw 4vw;" onclick="saveAnnLinks()">💾 保存跳转按钮</button>
+        <span class="muted" style="font-size:2.5vw;">也可以点左上角「保存全部」，两处都会提交这一项。</span>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">📢 系统公告推送（蓝色全服 tip）</div>
@@ -1418,7 +1421,7 @@ if (document.readyState === 'loading') {
 // 把 <input type=file> + 目标 textarea + 预览图 绑成一组
 // 选择本地图片后自动读取成 base64 并填入 textarea，同时显示预览
 // 自动压缩：> 400KB 走 canvas 压成 ≤ 300KB JPEG
-function bindImageUpload(fileId, textareaId, previewId) {
+function bindImageUpload(fileId, textareaId, previewId, maxBytes) {
   const fileEl = $(fileId);
   const taEl = $(textareaId);
   const previewEl = $(previewId);
@@ -1434,7 +1437,7 @@ function bindImageUpload(fileId, textareaId, previewId) {
     if (!f) return;
     if (!/^image\//.test(f.type)) return toast('请选择图片文件', 'err');
     toast('正在处理图片…');
-    processImage(f).then(dataUrl => {
+    processImage(f, maxBytes).then(dataUrl => {
       taEl.value = dataUrl;
       previewEl.src = dataUrl;
       previewEl.style.display = 'inline-block';
@@ -1446,7 +1449,7 @@ function bindImageUpload(fileId, textareaId, previewId) {
 
 // 处理图片：压缩到 base64 字符数 < 250K（≈ 187KB 真实字节，远低于 CloudBase 网关 1MB 限制）
 // 流程：读 dataURL → 画到 canvas → 从 1024px/q0.7 起步，逐级降到 800px/q0.4
-async function processImage(file) {
+async function processImage(file, maxBytes) {
   // 先读成 dataURL
   const dataUrl = await new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -1454,6 +1457,8 @@ async function processImage(file) {
     r.onerror = () => reject(new Error('读取失败'));
     r.readAsDataURL(file);
   });
+  // 头像专用：目标 60KB，尺寸/质量一起降；不再沿用公告图的 187KB 目标
+  if (maxBytes) return compressImageToMax(dataUrl, maxBytes);
   // 原图已经够小就直接返回（避免 canvas 二次编码反而变大）
   if (dataUrl.length < 250 * 1024) return dataUrl;
   // 否则走 canvas 压缩
@@ -1488,6 +1493,62 @@ async function processImage(file) {
     }
   }
   throw new Error('图片无法压缩到安全大小（请用画图工具手动压到 200KB 以内再上传）');
+}
+
+function _dataUrlBytes(dataUrl) {
+  const i = String(dataUrl || '').indexOf(',');
+  return i < 0 ? 0 : Math.ceil((dataUrl.length - i - 1) * 3 / 4);
+}
+
+// 头像压缩：目标真实文件字节 ≤ maxBytes（默认调用方传 60KB）
+async function compressImageToMax(dataUrl, maxBytes) {
+  if (_dataUrlBytes(dataUrl) <= maxBytes) return dataUrl;
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('图片解码失败'));
+    i.src = dataUrl;
+  });
+  let width = Math.min(img.width || 384, 384);
+  let height = Math.round((img.height || 384) * width / (img.width || 384));
+  let quality = 0.82;
+  let lastOut = '';
+  for (let attempt = 0; attempt < 42; attempt++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, width);
+    canvas.height = Math.max(1, height);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // 优先 WebP（保留透明），不支持时退回白底 JPEG
+    let out = canvas.toDataURL('image/webp', quality);
+    if (!/^data:image\/webp/i.test(out)) {
+      const c2 = document.createElement('canvas');
+      c2.width = canvas.width;
+      c2.height = canvas.height;
+      const g2 = c2.getContext('2d');
+      g2.fillStyle = '#fff';
+      g2.fillRect(0, 0, c2.width, c2.height);
+      g2.drawImage(img, 0, 0, c2.width, c2.height);
+      out = c2.toDataURL('image/jpeg', quality);
+    }
+    lastOut = out;
+    if (_dataUrlBytes(out) <= maxBytes) return out;
+    if (quality > 0.38) quality = Math.max(0.34, quality - 0.07);
+    else {
+      width = Math.max(64, Math.round(width * 0.76));
+      height = Math.max(64, Math.round(height * 0.76));
+      quality = 0.7;
+      // 已经缩到最小还压不进 60KB：最后再降一次质量
+      if (width <= 64 && height <= 64) {
+        const tiny = canvas.toDataURL('image/jpeg', 0.5);
+        if (_dataUrlBytes(tiny) <= maxBytes) return tiny;
+        break;
+      }
+    }
+  }
+  if (lastOut && _dataUrlBytes(lastOut) <= maxBytes) return lastOut;
+  throw new Error('头像无法压缩到 ' + Math.round(maxBytes / 1024) + 'KB，请换一张更简单的图片');
 }
 
 // ===== 登录 =====
@@ -1898,7 +1959,7 @@ async function editPlayer(p) {
         <span>🔒 默认开启绑定上限值（cap_bound=1）—— 属性到 cap 后不再无限增长</span>
       </label>
     </div></div>
-    <div class="form-row full"><div><label>头像（base64 data:image/...）</label><textarea id="m_avatar" rows="3">${escapeHtml(avatar)}</textarea>
+    <div class="form-row full"><div><label>头像（base64 data:image/...；选择本地图片会自动压到 60KB 以内）</label><textarea id="m_avatar" rows="3">${escapeHtml(avatar)}</textarea>
       <div class="img-upload" style="margin-top:1.5vw;">
         <button type="button" class="file-btn" onclick="$('m_avatar_file').click()">📁 选择本地图片</button>
         <input type="file" id="m_avatar_file" accept="image/*" style="display:none;">
@@ -1947,7 +2008,7 @@ async function editPlayer(p) {
     // 后端返回更新后的玩家（包含被动属性补偿后的真实值），只更新本地卡片
     updatePlayerLocal(id, res.player || fields);
   });
-  setTimeout(() => bindImageUpload('m_avatar_file', 'm_avatar', 'm_avatar_preview'), 50);
+  setTimeout(() => bindImageUpload('m_avatar_file', 'm_avatar', 'm_avatar_preview', 60 * 1024), 50);
 }
 
 // 编辑玩家 DM（登录账号）：改 dm 字段并同步所有引用
@@ -2103,6 +2164,10 @@ async function showPlayerCultivation(id, name) {
             + '<div>等级 <b style="color:#ffd700;">Lv.' + (s.level || 0) + '</b></div>'
             + '<div>蓝耗 ' + (s.blue_cost || 0) + '</div>'
             + '<div>需 Lv.' + (s.lv_required || 1) + (s.reachable ? '' : ' <span style="color:#ff4d5a;">(未达)</span>') + '</div>'
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:.7vw;flex-shrink:0;">'
+            + '<button class="mini-op" style="padding:1vw 2vw;min-width:8vw;" onclick="adjustPlayerSkill(\'' + encodeURIComponent(id) + '\',\'sect\',\'' + encodeURIComponent(s.id) + '\',' + (s.level || 0) + ',1,\'' + encodeURIComponent(name || id) + '\')">＋1</button>'
+            + '<button class="mini-op" style="padding:1vw 2vw;min-width:8vw;opacity:' + ((s.level || 0) > 0 ? '1' : '.35') + ';" onclick="adjustPlayerSkill(\'' + encodeURIComponent(id) + '\',\'sect\',\'' + encodeURIComponent(s.id) + '\',' + (s.level || 0) + ',-1,\'' + encodeURIComponent(name || id) + '\')">－1</button>'
             + '</div></div>';
         });
       }
@@ -2135,6 +2200,10 @@ async function showPlayerCultivation(id, name) {
             + '<div style="text-align:right;flex-shrink:0;font-size:2.5vw;line-height:1.7;color:rgba(255,255,255,.6);">'
             + '<div>剩余次数 <b style="color:' + c + ';font-size:3.4vw;">' + cnt + '</b></div>'
             + '<div>需 Lv.' + (s.lv_required || 0) + (s.reachable ? '' : ' <span style="color:#ff4d5a;">(未达)</span>') + '</div>'
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:.7vw;flex-shrink:0;">'
+            + '<button class="mini-op" style="padding:1vw 2vw;min-width:8vw;" onclick="adjustPlayerSkill(\'' + encodeURIComponent(id) + '\',\'sidejob\',\'' + encodeURIComponent(s.id) + '\',' + cnt + ',1,\'' + encodeURIComponent(name || id) + '\')">＋1</button>'
+            + '<button class="mini-op" style="padding:1vw 2vw;min-width:8vw;opacity:' + (cnt > 0 ? '1' : '.35') + ';" onclick="adjustPlayerSkill(\'' + encodeURIComponent(id) + '\',\'sidejob\',\'' + encodeURIComponent(s.id) + '\',' + cnt + ',-1,\'' + encodeURIComponent(name || id) + '\')">－1</button>'
             + '</div></div>';
         });
       }
@@ -2143,6 +2212,30 @@ async function showPlayerCultivation(id, name) {
   }
 
   showModal('🧘 ' + (name || id) + ' 的修行灵力', body, function () { closeModal(); }, '关闭');
+}
+
+// 后台直接增减玩家技能数量：门派 = 等级，副业 = 剩余次数
+async function adjustPlayerSkill(playerIdEnc, kind, skillIdEnc, current, delta, nameEnc) {
+  let playerId, skillId, name;
+  try {
+    playerId = decodeURIComponent(playerIdEnc);
+    skillId = decodeURIComponent(skillIdEnc);
+    name = decodeURIComponent(nameEnc || '');
+  } catch (e) {
+    return toast('参数错误', 'err');
+  }
+  const cur = Math.max(0, parseInt(current) || 0);
+  const value = Math.max(0, Math.min(9999, cur + (parseInt(delta) || 0)));
+  if (value === cur) return;
+  const r = await api('/api/admin/setPlayerSkill', {
+    method: 'POST',
+    body: JSON.stringify({ player_id: playerId, skill_id: skillId, kind: kind, value: value })
+  });
+  if (r.error) return toast('保存失败：' + r.error, 'err');
+  toast((delta > 0 ? '已增加' : '已减少') + '：' + (kind === 'sidejob' ? '剩余次数' : '技能等级') + ' → ' + value, 'ok', 1800);
+  // 关闭旧窗口重新拉取，避免页面显示旧数量
+  closeModal();
+  await showPlayerCultivation(playerId, name || playerId);
 }
 
 // 玩家管理：查看该玩家绑定的门派/副业，快捷解绑或跳到技能管理
@@ -2605,7 +2698,7 @@ function showCreatePlayer() {
     </div></div>
     <div class="form-row full"><div><label>属性（attr）</label><input id="c_attr" maxlength="50" placeholder="可选"></div></div>
     <div class="form-row full"><div><label>专属 UID（不填则后端自动生成）</label><input id="c_uid" maxlength="16" placeholder="留空即可，用于跨玩家绑定的稳定身份"></div></div>
-    <div class="form-row full"><div><label>头像（可本地上传转 base64）</label><textarea id="c_avatar" rows="2" placeholder="data:image/png;base64,..."></textarea></div>
+    <div class="form-row full"><div><label>头像（可本地上传转 base64，自动压到 60KB 以内）</label><textarea id="c_avatar" rows="2" placeholder="data:image/png;base64,..."></textarea></div>
       <div class="img-upload">
         <button type="button" class="file-btn" onclick="$('c_avatar_file').click()">📁 选择本地图片</button>
         <input type="file" id="c_avatar_file" accept="image/*" style="display:none;">
@@ -2648,7 +2741,7 @@ function showCreatePlayer() {
     if (res.error) return toast(res.error, 'err');
     toast(`已创建（UID=${res.uid}）`); closeModal(); loadPlayers();
   });
-  setTimeout(() => bindImageUpload('c_avatar_file', 'c_avatar', 'c_avatar_preview'), 50);
+  setTimeout(() => bindImageUpload('c_avatar_file', 'c_avatar', 'c_avatar_preview', 60 * 1024), 50);
 }
 
 // ===== 地点管理 =====
@@ -5242,7 +5335,7 @@ async function saveAnnLinks() {
   const el = $('cfg_announcement_links');
   if (!el) return;
   const v = String(el.value || '');
-  const bad = _parseAnnLinks(v).filter(async function (x) { return x.kind === 'bad'; });
+  const bad = _parseAnnLinks(v).filter(function (x) { return x.kind === 'bad'; });
   if (bad.length && !await uiConfirm('有 ' + bad.length + ' 个目标格式不对，玩家端会忽略它们。\n\n仍然保存吗？')) return;
   const r = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields: { announcement_links: v } }) });
   if (r.error) return toast('保存失败：' + r.error, 'err');
