@@ -1200,6 +1200,9 @@ let ALL_PLACES = [];
 let ALL_PLAYERS = [];
 let ALL_SECTS = [];
 let ALL_SECT_BINDS = [];
+// 玩家头像延迟加载缓存：避免 admin/players 一次返回 500 个 base64 头像把列表拖慢
+const _PLAYER_AVATAR_CACHE = new Map();
+let _playerAvatarObserver = null;
 const API_BASE = 'https://hundun-d0g97wc3v815cd196-1497599973.ap-shanghai.app.tcloudbase.com';
 let ADMIN_PASS = '';
 // 云函数能力标记：null=还没检测；true=新后端支持对应功能；false=旧后端
@@ -1516,6 +1519,11 @@ function switchTab(name) {
   ['players','places','items','sect','sidejob','announce','posts','treasure','config','gomoku','merchant','logs','backup'].forEach(n => {
     $('tab-' + n).style.display = (n === name ? 'block' : 'none');
   });
+  // 玩家列表已经加载过：切回来只重绘本地数据，不再重新请求整页
+  if (name === 'players' && _playersLoaded) {
+    renderPlayerList();
+    return;
+  }
   refreshAll();
 }
 
@@ -1553,14 +1561,16 @@ function refreshAll() {
   };
   run();
 }
-// 关键：把自动刷新改成 120 秒（2 分钟）一次，大幅降低界面重建频率
-// 用户手动点"↻"或切 tab 时仍会立刻刷新
-setInterval(refreshAll, 120000);
+// 关键：把自动刷新改成 120 秒（2 分钟）一次；玩家页不再自动整页刷新，避免打断/等待
+//   玩家页需要最新数据时手动点右上角"↻"即可
+setInterval(() => { if (curTab !== 'players' || !_playersLoaded) refreshAll(); }, 120000);
 
 // ===== 玩家管理 =====
 let _playerSearch = '';
+let _playersLoaded = false;
 
 async function loadPlayers() {
+  _PLAYER_AVATAR_CACHE.clear();
   $("playerList").innerHTML = '<div class="empty">加载中…</div>';
   // 同时拉地点（中文名映射）、玩家、门派、玩家-门派绑定
   const [res, pl, sectRes, bindRes] = await Promise.all([
@@ -1573,7 +1583,8 @@ async function loadPlayers() {
   if (pl.ok && pl.places) ALL_PLACES = pl.places;
   ALL_SECTS = (sectRes.ok && sectRes.sects) ? sectRes.sects : [];
   ALL_SECT_BINDS = (bindRes.ok && bindRes.binds) ? bindRes.binds : [];
-  if (res.error) { $("playerList").innerHTML = '<div class="empty">' + escapeHtml(res.error) + '</div>'; return; }
+  if (res.error) { _playersLoaded = false; $("playerList").innerHTML = '<div class="empty">' + escapeHtml(res.error) + '</div>'; return; }
+  _playersLoaded = true;
   renderPlayerList();
 }
 
@@ -1592,7 +1603,67 @@ function sectNamesOf(playerId) {
   }).join('');
 }
 
+// ===== 玩家头像（列表里延迟加载，避免一次拉全服 base64） =====
+function _playerAvatarHtml(p, safeId) {
+  const cached = _PLAYER_AVATAR_CACHE.has(p.id);
+  const avatar = cached ? (_PLAYER_AVATAR_CACHE.get(p.id) || '') : '';
+  const letter = escapeHtml(String(p.name || p.id || '?').slice(0, 1));
+  const inner = avatar
+    ? `<img src="${escapeHtml(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">`
+    : `<span>${letter}</span>`;
+  return `<div class="player-avatar" data-avatar-id="${safeId}" data-avatar-loaded="${cached ? '1' : '0'}"
+    style="width:13vw;height:13vw;min-width:46px;min-height:46px;max-width:64px;max-height:64px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;color:rgba(255,255,255,.55);font-size:4.4vw;font-weight:bold;">${inner}</div>`;
+}
+
+function _applyPlayerAvatar(el, avatar) {
+  if (!el) return;
+  el.dataset.avatarLoaded = '1';
+  if (!avatar) return;
+  el.innerHTML = `<img src="${escapeHtml(avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+}
+
+async function _loadPlayerAvatar(id, el) {
+  if (_PLAYER_AVATAR_CACHE.has(id)) {
+    _applyPlayerAvatar(el, _PLAYER_AVATAR_CACHE.get(id) || '');
+    return;
+  }
+  try {
+    const r = await api('/api/admin/playerAvatar?id=' + encodeURIComponent(id));
+    const avatar = (r && r.ok && r.avatar) ? r.avatar : '';
+    _PLAYER_AVATAR_CACHE.set(id, avatar);
+    let node = (el && el.isConnected) ? el : null;
+    if (!node) {
+      node = Array.from(document.querySelectorAll('#playerList [data-avatar-id]'))
+        .find(n => String(n.dataset.avatarId) === String(id));
+    }
+    _applyPlayerAvatar(node, avatar);
+  } catch (e) {
+    // 头像加载失败不影响玩家列表，保留首字占位
+  }
+}
+
+function _initPlayerAvatars() {
+  if (_playerAvatarObserver) { _playerAvatarObserver.disconnect(); _playerAvatarObserver = null; }
+  const nodes = Array.from(document.querySelectorAll('#playerList [data-avatar-id]:not([data-avatar-loaded="1"])'));
+  if (!nodes.length) return;
+  if (!('IntersectionObserver' in window)) {
+    nodes.forEach(n => _loadPlayerAvatar(n.dataset.avatarId, n));
+    return;
+  }
+  _playerAvatarObserver = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const n = en.target;
+      if (_playerAvatarObserver) _playerAvatarObserver.unobserve(n);
+      _loadPlayerAvatar(n.dataset.avatarId, n);
+    });
+  }, { rootMargin: '300px' });
+  nodes.forEach(n => _playerAvatarObserver.observe(n));
+}
+
+
 function renderPlayerList() {
+  const _scrollY = window.scrollY || 0;
   const kw = _playerSearch.trim().toLowerCase();
   const filtered = ALL_PLAYERS.filter(p => !kw || (p.id + ' ' + p.name).toLowerCase().includes(kw));
   if (!filtered.length) { $("playerList").innerHTML = '<div class="empty">无匹配玩家</div>'; return; }
@@ -1607,7 +1678,8 @@ function renderPlayerList() {
     const safeDm = escapeHtml(p.dm || p.id);
     // 每个玩家一张卡片（垂直布局：信息在上 → 操作在下）
     html += `<div data-player-row data-pid="${safeId}" data-keywords="${escapeHtml((p.id+' '+p.name+' '+(p.dm||'')).toLowerCase())}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:2.5vw;margin-bottom:2.5vw;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2vw;">
+      <div style="display:flex;gap:2.5vw;align-items:flex-start;margin-bottom:2vw;">
+        ${_playerAvatarHtml(p, safeId)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;gap:2vw;flex-wrap:wrap;margin-bottom:.5vw;">
             <div style="font-size:4.4vw;font-weight:bold;color:#ff4d5a;line-height:1.2;">${safeName}</div>
@@ -1648,6 +1720,7 @@ function renderPlayerList() {
         <button class="row-op code" onclick="setPlayerOrderPrompt('${safeId}',${so})">#顺序</button>
         <button class="row-op code" onclick="openPlayerInventoryPanel('${safeId}','${safeName}')">🎒背包</button>
         <button class="row-op code" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;" onclick="showPlayerCultivation('${safeId}','${safeName}')">🧘 修行灵力</button>
+        <button class="row-op code" style="background:rgba(192,132,252,.18);border:1px solid #c084fc;" onclick="openPlayerBindingsPanel('${safeId}')">📜 门派/副业</button>
         <button class="row-op code" style="background:rgba(255,77,90,.18);border:1px solid #ff4d5a;" onclick="openPlayerPinPanel('${safeId}','${safeName}')">🔐 口令</button>
         <button class="row-op code" onclick="openTransferPlayerPanel('${safeId}','${safeName}')">📍改位置</button>
         <button class="row-op code" onclick="openBindTitlePanel('${safeId}','${safeName}')">📛+称号</button>
@@ -1657,6 +1730,30 @@ function renderPlayerList() {
     </div>`;
   }
   $("playerList").innerHTML = html;
+  _initPlayerAvatars();
+  if (_scrollY) window.scrollTo(0, _scrollY);
+}
+
+// 保存成功后只更新本地玩家对象并重绘列表，不再重新请求整个玩家列表
+function updatePlayerLocal(id, patch) {
+  const p = (ALL_PLAYERS || []).find(x => String(x.id) === String(id));
+  if (!p) return false;
+  Object.assign(p, patch || {});
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'avatar')) {
+    _PLAYER_AVATAR_CACHE.set(p.id, patch.avatar || '');
+  }
+  renderPlayerList();
+  return true;
+}
+
+// 顺序修改后本地重排，不重新拉全服列表
+function sortPlayersLocal() {
+  ALL_PLAYERS.sort((a, b) => {
+    const sa = a.sort_order || 0, sb = b.sort_order || 0;
+    if (sa !== sb) return sa - sb;
+    return (b.updated_at || 0) - (a.updated_at || 0);
+  });
+  renderPlayerList();
 }
 
 async function adjustGold(id, delta) {
@@ -1665,7 +1762,7 @@ async function adjustGold(id, delta) {
   const res = await api('/api/admin/updateGold', { method: 'POST', body: JSON.stringify({ id, delta }) });
   if (res.error) return toast(res.error, 'err');
   toast(`${delta > 0 ? '赠送' : '扣除'}成功，当前 ${res.gold}`);
-  loadPlayers();
+  updatePlayerLocal(id, { gold: res.gold });
 }
 
 // 自定义数量赠送/扣除玄币（弹输入数量）
@@ -1688,7 +1785,7 @@ async function adjustGoldPrompt(id) {
     if (res.error) return toast(res.error, 'err');
     toast(`${v > 0 ? '赠送' : '扣除'} ${Math.abs(v)} 玄币成功，当前 ${res.gold}`, 'ok', 1500);
     closeModal();
-    loadPlayers();
+    updatePlayerLocal(id, { gold: res.gold });
   }, '关闭');
 }
 
@@ -1808,7 +1905,9 @@ async function editPlayer(p) {
     if (!Object.keys(fields).length) return toast('未修改', 'err');
     const res = await api('/api/admin/updatePlayer', { method: 'POST', body: JSON.stringify({ id, fields }) });
     if (res.error) return toast(res.error, 'err');
-    toast('已更新'); closeModal(); loadPlayers();
+    toast('已更新'); closeModal();
+    // 后端返回更新后的玩家（包含被动属性补偿后的真实值），只更新本地卡片
+    updatePlayerLocal(id, res.player || fields);
   });
   setTimeout(() => bindImageUpload('m_avatar_file', 'm_avatar', 'm_avatar_preview'), 50);
 }
@@ -1835,7 +1934,7 @@ async function openEditDmPanel(id, currentDm, name) {
     if (res.error) return toast('修改失败：' + res.error, 'err');
     toast('已修改，新 DM：' + newDm, 'ok', 2000);
     closeModal();
-    loadPlayers();
+    updatePlayerLocal(id, { dm: newDm });
   }, '保存');
 }
 
@@ -2008,6 +2107,150 @@ async function showPlayerCultivation(id, name) {
   showModal('🧘 ' + (name || id) + ' 的修行灵力', body, function () { closeModal(); }, '关闭');
 }
 
+// 玩家管理：查看该玩家绑定的门派/副业，快捷解绑或跳到技能管理
+// 说明：数据直接复用玩家端的两个只读接口，编辑按钮调用后台已有的
+//      manageSectSkills / manageSidejobSkills，所以和从门派/副业列表进入完全一样。
+async function openPlayerBindingsPanel(id, name) {
+  if (!name) {
+    const p = (ALL_PLAYERS || []).find(x => String(x.id) === String(id));
+    name = p ? (p.name || p.id) : id;
+  }
+  let sectRes = {}, sjRes = {};
+  try {
+    const arr = await Promise.all([
+      api('/api/sectSkills?id=' + encodeURIComponent(id)).catch(e => ({ error: e.message || String(e) })),
+      api('/api/sidejobSkills?id=' + encodeURIComponent(id)).catch(e => ({ error: e.message || String(e) })),
+    ]);
+    sectRes = arr[0] || {};
+    sjRes = arr[1] || {};
+  } catch (e) {
+    return toast('读取失败：' + (e.message || e), 'err', 3000);
+  }
+  if (sectRes.error && sjRes.error) return toast(sectRes.error || sjRes.error, 'err', 3000);
+  const sects = sectRes.sects || [];
+  const sidejobs = sjRes.sidejobs || [];
+  const pname = name || id;
+
+  let body = `<div style="font-size:2.8vw;color:rgba(255,255,255,.55);margin-bottom:2vw;line-height:1.7;">
+    玩家：<b style="color:#fff;">${escapeHtml(pname)}</b>
+    <span style="font-family:monospace;color:rgba(255,255,255,.35);">（${escapeHtml(id)}）</span><br>
+    已绑定：门派 <b style="color:#ffd700;">${sects.length}</b> 个 · 副业 <b style="color:#c084fc;">${sidejobs.length}</b> 个
+  </div>`;
+
+  // ===== 修行门派 =====
+  body += `<div style="font-size:3.3vw;color:#ffd700;font-weight:bold;margin:1.5vw 0 1.2vw;">📜 修行门派（${sects.length}）</div>`;
+  if (!sects.length) {
+    body += '<div class="empty">没有绑定任何门派</div>';
+  } else {
+    sects.forEach(sec => {
+      const list = sec.skills || [];
+      const unlocked = list.filter(s => s.unlocked).length;
+      body += `<div style="display:flex;align-items:center;gap:2vw;justify-content:space-between;border:1px solid rgba(255,215,0,.25);border-radius:8px;padding:2vw;margin-bottom:1.4vw;background:rgba(255,215,0,.05);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:3.1vw;font-weight:bold;color:#fff;">${escapeHtml(sec.name)}
+            <span style="font-size:2.4vw;color:rgba(255,255,255,.45);font-weight:normal;">${list.length} 个技能 · 已解锁 ${unlocked}/${list.length}</span>
+          </div>
+          <div style="font-size:2.35vw;color:rgba(255,255,255,.35);font-family:monospace;margin-top:.4vw;">ID: ${escapeHtml(sec.id)}</div>
+        </div>
+        <div style="display:flex;gap:1.2vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="pb-sect-edit" data-sid="${escapeHtml(sec.id)}" data-sname="${escapeHtml(sec.name)}"
+            style="padding:1.5vw 2.2vw;background:rgba(46,232,78,.18);border:1px solid #2ee84e;color:#fff;border-radius:6px;font-size:2.6vw;cursor:pointer;white-space:nowrap;">✏️ 编辑技能</button>
+          <button class="pb-sect-unbind" data-pid="${escapeHtml(id)}" data-pname="${escapeHtml(pname)}" data-sid="${escapeHtml(sec.id)}" data-sname="${escapeHtml(sec.name)}"
+            style="padding:1.5vw 2.2vw;background:rgba(230,40,54,.18);border:1px solid #e62836;color:#fff;border-radius:6px;font-size:2.6vw;cursor:pointer;white-space:nowrap;">解绑</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  // ===== 副业 =====
+  body += `<div style="font-size:3.3vw;color:#c084fc;font-weight:bold;margin:2.2vw 0 1.2vw;">🛠️ 副业（${sidejobs.length}）</div>`;
+  if (!sidejobs.length) {
+    body += '<div class="empty">没有绑定任何副业</div>';
+  } else {
+    sidejobs.forEach(sj => {
+      const list = sj.skills || [];
+      const total = list.reduce((a, s) => a + (parseInt(s.count) || 0), 0);
+      const tempTag = sj.temporary
+        ? ' <span style="display:inline-block;background:linear-gradient(180deg,#ffb74d,#e67e22);color:#3a2100;font-size:2.2vw;font-weight:800;padding:.2vw 1.1vw;border-radius:99px;vertical-align:middle;">临时</span>'
+        : '';
+      body += `<div style="display:flex;align-items:center;gap:2vw;justify-content:space-between;border:1px solid rgba(192,132,252,.25);border-radius:8px;padding:2vw;margin-bottom:1.4vw;background:rgba(192,132,252,.05);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:3.1vw;font-weight:bold;color:#fff;">${escapeHtml(sj.name)}${tempTag}
+            <span style="font-size:2.4vw;color:rgba(255,255,255,.45);font-weight:normal;">${list.length} 个技能 · 剩余次数 ${total}</span>
+          </div>
+          <div style="font-size:2.35vw;color:rgba(255,255,255,.35);font-family:monospace;margin-top:.4vw;">ID: ${escapeHtml(sj.id)}</div>
+        </div>
+        <div style="display:flex;gap:1.2vw;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="pb-sj-edit" data-sjid="${escapeHtml(sj.id)}" data-sjname="${escapeHtml(sj.name)}"
+            style="padding:1.5vw 2.2vw;background:rgba(46,232,78,.18);border:1px solid #2ee84e;color:#fff;border-radius:6px;font-size:2.6vw;cursor:pointer;white-space:nowrap;">✏️ 编辑技能</button>
+          <button class="pb-sj-unbind" data-pid="${escapeHtml(id)}" data-pname="${escapeHtml(pname)}" data-sjid="${escapeHtml(sj.id)}" data-sjname="${escapeHtml(sj.name)}"
+            style="padding:1.5vw 2.2vw;background:rgba(230,40,54,.18);border:1px solid #e62836;color:#fff;border-radius:6px;font-size:2.6vw;cursor:pointer;white-space:nowrap;">解绑</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  showModal('📜 ' + escapeHtml(pname) + ' 的门派/副业', body, null, '关闭', null, true);
+  setTimeout(() => {
+    document.querySelectorAll('#modal .pb-sect-edit').forEach(btn => {
+      btn.onclick = () => openPlayerSectEditor(btn.dataset.sid, btn.dataset.sname);
+    });
+    document.querySelectorAll('#modal .pb-sj-edit').forEach(btn => {
+      btn.onclick = () => openPlayerSidejobEditor(btn.dataset.sjid, btn.dataset.sjname);
+    });
+    document.querySelectorAll('#modal .pb-sect-unbind').forEach(btn => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try { await unbindPlayerSect(btn.dataset.pid, btn.dataset.pname, btn.dataset.sid, btn.dataset.sname); }
+        finally { btn.disabled = false; }
+      };
+    });
+    document.querySelectorAll('#modal .pb-sj-unbind').forEach(btn => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try { await unbindPlayerSidejob(btn.dataset.pid, btn.dataset.pname, btn.dataset.sjid, btn.dataset.sjname); }
+        finally { btn.disabled = false; }
+      };
+    });
+  }, 50);
+}
+
+function openPlayerSectEditor(sectId, sectName) {
+  closeModal();
+  setTimeout(() => manageSectSkills(sectId, sectName), 80);
+}
+function openPlayerSidejobEditor(sidejobId, sidejobName) {
+  closeModal();
+  setTimeout(() => manageSidejobSkills(sidejobId, sidejobName), 80);
+}
+
+async function unbindPlayerSect(playerId, playerName, sectId, sectName) {
+  if (!await uiConfirm(`确认解绑 ${playerName} 的门派【${sectName}】？\n\n该玩家在这个门派下已学的技能会被清空。`)) return;
+  const r = await api('/api/admin/unbindSect', { method: 'POST', body: JSON.stringify({ player_id: playerId, sect_id: sectId }) });
+  if (r.error) return toast(r.error, 'err');
+  toast('已解绑门派：' + sectName, 'ok', 1600);
+  // 本地移除绑定并重绘玩家列表，不再重新请求整页
+  const pp = (ALL_PLAYERS || []).find(x => String(x.id) === String(playerId));
+  const puid = pp && pp.uid;
+  ALL_SECT_BINDS = (ALL_SECT_BINDS || []).filter(b => !(String(b.sect_id) === String(sectId) &&
+    (String(b.player_id) === String(playerId) || (puid && String(b.player_uid) === String(puid)))));
+  if (pp && !ALL_SECT_BINDS.some(b => String(b.player_id) === String(playerId) || (puid && String(b.player_uid) === String(puid)))) {
+    pp.sect = '散人';
+  }
+  renderPlayerList();
+  await openPlayerBindingsPanel(playerId, playerName);
+  if (typeof loadSectAdmin === 'function') loadSectAdmin();
+}
+
+async function unbindPlayerSidejob(playerId, playerName, sidejobId, sidejobName) {
+  if (!await uiConfirm(`确认解绑 ${playerName} 的副业【${sidejobName}】？\n\n该玩家在这个副业下的所有技能次数会被清空（临时技能也会一起清除）。`)) return;
+  const r = await api('/api/admin/unbindSidejob', { method: 'POST', body: JSON.stringify({ player_id: playerId, sidejob_id: sidejobId }) });
+  if (r.error) return toast(r.error, 'err');
+  toast('已解绑副业：' + sidejobName, 'ok', 1600);
+  await openPlayerBindingsPanel(playerId, playerName);
+  if (typeof loadSidejobAdmin === 'function') loadSidejobAdmin();
+}
+
 // 后端玩家背包面板（在玩家列表直接点击查看+编辑+删除道具）
 async function openPlayerInventoryPanel(id, name) {
   const res = await api('/api/admin/playerInventory?id=' + encodeURIComponent(id));
@@ -2174,7 +2417,7 @@ async function openTransferPlayerPanel(id, name) {
         if (r.error) return toast(r.error, 'err');
         toast(`已转移到【${placeName}】`, 'ok', 1500);
         closeModal();
-        loadPlayers();
+        updatePlayerLocal(id, { place_id: placeId });
       };
     });
   }, 50);
@@ -2221,7 +2464,10 @@ async function deletePlayer(id, name) {
   if (!await uiConfirm(`确认把玩家「${name||id}」移到回收站？\n（可在右上角"回收站"里恢复或彻底删除；移到回收站后该玩家无法登录大厅）`)) return;
   const res = await api('/api/admin/deletePlayer', { method: 'POST', body: JSON.stringify({ id }) });
   if (res.error) return toast(res.error, 'err');
-  toast('已移到回收站（可恢复）'); loadPlayers();
+  toast('已移到回收站（可恢复）');
+  ALL_PLAYERS = ALL_PLAYERS.filter(p => String(p.id) !== String(id));
+  _PLAYER_AVATAR_CACHE.delete(id);
+  renderPlayerList();
 }
 
 // 设置玩家顺序（弹窗输入数字；数字越小越靠前）
@@ -2231,7 +2477,10 @@ async function setPlayerOrderPrompt(id, currentOrder) {
   const so = Math.max(parseInt(v) || 0, 0);
   const res = await api('/api/admin/setPlayerOrder', { method: 'POST', body: JSON.stringify({ id, sort_order: so }) });
   if (res.error) return toast(res.error, 'err');
-  toast(`已设为排序 #${so}`); loadPlayers();
+  toast(`已设为排序 #${so}`);
+  const p = ALL_PLAYERS.find(x => String(x.id) === String(id));
+  if (p) p.sort_order = so;
+  sortPlayersLocal();
 }
 
 // 回收站：列出已删除的玩家，可恢复或彻底删除
