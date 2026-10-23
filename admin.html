@@ -38,6 +38,15 @@ body { background:url('hall_bg.png') center/cover no-repeat; }
   cursor:pointer; user-select:none; backdrop-filter:blur(6px);
   -webkit-backdrop-filter:blur(6px); }
 .icon-btn:active { transform:scale(.92); background:rgba(0,0,0,.7); }
+.top-save-btn {
+  height:11vw; max-height:46px; padding:0 3.2vw;
+  border:1px solid rgba(255,255,255,.35); border-radius:999px;
+  background:linear-gradient(180deg,#2ee84e,#16a838); color:#041a08;
+  font-size:3.2vw; font-weight:900; white-space:nowrap;
+  display:flex; align-items:center; justify-content:center; gap:.6vw;
+  cursor:pointer; box-shadow:0 3px 10px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.top-save-btn:active { transform:scale(.95); }
 .topbar-title { font-size:4.4vw; font-weight:bold; color:rgba(255,255,255,.7);
   text-shadow:0 0 8px rgba(255,77,90,.8); }
 
@@ -340,10 +349,10 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
 </div>
 
 <div class="topbar">
-  <button class="icon-btn" onclick="logout()" title="退出">↩</button>
+  <button class="top-save-btn" onclick="quickSaveAll()" title="保存全部数据设置（含自动清理、宝箱、五子棋、公告按钮）">💾 保存全部</button>
   <div class="topbar-title">管理控制台</div>
   <div style="display:flex;gap:1.5vw;">
-    <button class="icon-btn" onclick="quickSaveAll()" title="保存数据" style="background:#2ee84e;color:#000;">💾</button>
+    <button class="icon-btn" onclick="logout()" title="退出">↩</button>
     <button class="icon-btn" onclick="refreshAll()" title="刷新">↻</button>
   </div>
 </div>
@@ -505,9 +514,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <div id="annList"><div class="empty">加载中…</div></div>
     </div>
     <div class="card">
-      <div class="card-title">🔗 公告页顶部跳转按钮
-        <div class="ops"><button class="mini-op green" onclick="saveAnnLinks()">💾 保存按钮</button></div>
-      </div>
+      <div class="card-title">🔗 公告页顶部跳转按钮</div>
       <div style="font-size:2.6vw;color:rgba(255,255,255,.55);line-height:1.75;margin-bottom:1.5vw;">
         每行一个按钮，格式：<code style="color:#0ff;">按钮名称|目标</code>（竖线分隔）。目标可以两种：<br>
         · <b style="color:#4d8cff;">外部网址</b>：必须 <code style="color:#0ff;">http://</code> 或 <code style="color:#0ff;">https://</code> 开头 → 点开是新标签网页<br>
@@ -520,6 +527,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       </div>
       <textarea id="cfg_announcement_links" rows="6" oninput="renderAnnLinksPreview(this.value)" placeholder="官网|https://example.com&#10;玩家群|https://qm.qq.com/q/xxxx&#10;规则图|公告图.png&#10;地图说明|imgs/notice/map.jpg" style="width:100%;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:2vw;font-size:2.8vw;font-family:monospace;line-height:1.75;resize:vertical;"></textarea>
       <div id="annLinksPreview" style="margin-top:1.5vw;"></div>
+      <div class="muted" style="font-size:2.5vw;margin-top:1vw;">修改后统一点左上角「💾 保存全部」提交。</div>
     </div>
     <div class="card">
       <div class="card-title">📢 系统公告推送（蓝色全服 tip）</div>
@@ -591,7 +599,6 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <div class="card-title">⚙️ 数据设置
         <div class="ops">
           <button class="mini-op" onclick="loadGameConfig()">🔄 重新加载</button>
-          <button class="mini-op green" onclick="saveGameConfig()">💾 保存</button>
         </div>
       </div>
       <div style="margin-bottom:2.5vw;padding:2vw;background:rgba(230,40,54,.08);border:1px solid #e62836;border-radius:6px;">
@@ -600,7 +607,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
         <button class="action-btn" style="background:linear-gradient(180deg,#e62836,#b8121f);color:#fff;width:auto;padding:1.5vw 3vw;font-size:3.2vw;" onclick="clearAllSysTips()">🗑️ 清空所有系统提示</button>
       </div>
       <div style="font-size:3vw;color:rgba(255,255,255,.55);margin-bottom:2vw;">
-        配置修改后点击「💾 保存」立即生效。玩家端下次切换 tab 或刷新页面时会拉取最新配置。
+        所有数据设置统一点<b style="color:#8effa8;">左上角「💾 保存全部」</b>提交；玩家端下次切换 tab 或刷新页面时拉取最新配置。
       </div>
 
       <!-- 偷窃 -->
@@ -664,17 +671,40 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <!-- BGM + 三大面板 -->
       <div class="card-title" style="border-left-color:#ff4d5a;font-size:4vw;margin-top:3vw;">🎵 玩家大厅背景音乐</div>
       <div class="form-row">
-        <div><label>大厅背景音乐</label>
-          <select id="cfg_bgm_enabled"><option value="1">开启（玩家首屏自动播放）</option><option value="0">关闭（玩家进游戏时不会自动播放）</option></select>
+        <div><label>大厅背景音乐（默认）</label>
+          <select id="cfg_bgm_enabled"><option value="1">默认开启（没设置过的玩家自动播放）</option><option value="0">默认关闭（没设置过的玩家不自动播放）</option></select>
         </div>
         <div><label>默认音量（0-100）</label><input id="cfg_bgm_default_volume" type="number" min="0" max="100" placeholder="60"></div>
       </div>
+      <div class="muted" style="font-size:2.5vw;margin-bottom:2vw;line-height:1.6;">玩家在设置里自己改过音乐开关/音量后，会记住该玩家的选择；这里改默认值只影响<b>还没自己设置过</b>的玩家，不会覆盖已设置的玩家。</div>
       <div class="form-row">
         <div><label>启动页背景音乐</label>
           <select id="cfg_start_bgm_enabled"><option value="1">开启（玩家打开网页就播放）</option><option value="0">关闭（启动页静音）</option></select>
         </div>
         <div><label>启动页音量（0-100）</label><input id="cfg_start_bgm_volume" type="number" min="0" max="100" placeholder="60"></div>
       </div>
+
+      <!-- 大厅轮盘旋转：全服模式 -->
+      <div class="card-title" style="border-left-color:#ffd700;font-size:4vw;margin-top:3vw;">🎡 大厅轮盘旋转</div>
+      <div class="form-row">
+        <div><label>全服模式</label>
+          <select id="cfg_wheel_spin_mode">
+            <option value="player">跟随玩家自己的开关（推荐）</option>
+            <option value="on">全服强制开启</option>
+            <option value="off">全服强制关闭</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:1.5vw;align-items:flex-end;flex-wrap:wrap;">
+          <button class="mini-op green" onclick="setWheelSpinMode('on')">⚡ 一键全服开启</button>
+          <button class="mini-op" onclick="setWheelSpinMode('off')">⛔ 一键全服关闭</button>
+          <button class="mini-op" onclick="setWheelSpinMode('player')">↩ 跟随玩家</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size:2.5vw;margin-bottom:2vw;line-height:1.6;">
+        强制开启/关闭会覆盖所有玩家的本地轮盘开关，玩家端设置会显示为锁定；选择「跟随玩家」后，玩家自己设置的关闭/开启继续有效，后台不再强制。<br>
+        按钮会立即保存当前数据设置面板的全部配置。
+      </div>
+
       <div class="form-row">
         <div><label>属性骰子面数（玩家点属性框时用）</label><input id="cfg_attr_dice" type="number" min="2" max="100" placeholder="14"></div>
         <div></div>
@@ -848,7 +878,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
         </div>
         <div class="form-row">
           <div><label>每张表单次最多处理条数（10-500）</label><input id="cfg_auto_clean_batch" type="number" min="10" max="500" placeholder="200"></div>
-          <div style="display:flex;align-items:flex-end;"><button class="action-btn" style="background:linear-gradient(180deg,#2ee84e,#1aa838);color:#000;width:100%;font-size:3.2vw;" onclick="saveAutoCleanConfig()">💾 保存清理设置</button></div>
+          <div style="display:flex;align-items:flex-end;font-size:2.5vw;color:rgba(255,255,255,.45);">统一点左上角「💾 保存全部」</div>
         </div>
         <div style="font-size:2.8vw;color:#ffd700;font-weight:bold;margin:2vw 0 1vw;">各表保留天数</div>
         <div class="form-row">
@@ -950,9 +980,8 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
   <!-- 商人（地图宝箱 + 雷区）-->
   <div id="tab-merchant" style="display:none;">
     <div class="card">
-      <div class="card-title">商人 · 宝箱刷新
-        <div class="ops"><button class="mini-op green" onclick="saveMerchantConfig()">💾 保存宝箱参数</button></div>
-      </div>
+      <div class="card-title">商人 · 宝箱刷新</div>
+      <div class="muted" style="font-size:2.5vw;margin-bottom:1.5vw;">宝箱参数修改后统一点左上角「💾 保存全部」。</div>
       <div class="form-row">
         <div><label>是否开启宝箱</label><select id="cfg_chest_enabled"><option value="1">开启</option><option value="0">关闭</option></select></div>
         <div><label>每几小时刷新一次</label><input id="cfg_chest_interval_hours" type="number" min="1" max="720" value="3"></div>
@@ -1034,9 +1063,8 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
   <!-- 五子棋 -->
   <div id="tab-gomoku" style="display:none;">
     <div class="card">
-      <div class="card-title">五子棋 · 对局参数
-        <div class="ops"><button class="mini-op green" onclick="saveGomokuConfig()">💾 保存五子棋参数</button></div>
-      </div>
+      <div class="card-title">五子棋 · 对局参数</div>
+      <div class="muted" style="font-size:2.5vw;margin-bottom:1.5vw;">五子棋参数修改后统一点左上角「💾 保存全部」。</div>
       <div class="form-row">
         <div><label>一回合倒计时（秒，10~600）</label><input id="cfg_gomoku_turn_seconds" type="number" min="10" max="600" placeholder="60"></div>
         <div><label>刷新一次卡牌消耗抽奖券（张）</label><input id="cfg_gomoku_refresh_cost" type="number" min="1" max="99" placeholder="1"></div>
@@ -1205,6 +1233,8 @@ const _PLAYER_AVATAR_CACHE = new Map();
 let _playerAvatarObserver = null;
 const API_BASE = 'https://hundun-d0g97wc3v815cd196-1497599973.ap-shanghai.app.tcloudbase.com';
 let ADMIN_PASS = '';
+let _gameConfigLoaded = false;
+let _savingAll = false;
 // 云函数能力标记：null=还没检测；true=新后端支持对应功能；false=旧后端
 let BACKEND_HAS_HIDE_BTNS = null;
 let BACKEND_HAS_RENAME_SKILL = null;
@@ -1496,19 +1526,27 @@ async function doLogin() {
 async function logout() {
   if (!await uiConfirm('确认退出后台？')) return;
   ADMIN_PASS = '';
+  _gameConfigLoaded = false;
   $("loginPass").value = '';
   $("loginBg").classList.remove('hide');
 }
 
-// 右上角“保存”按钮：拉当前数据设置面板的字段并保存
+// 左上角“保存全部”：一次提交所有数据设置（game_config）
 async function quickSaveAll() {
-  if (curTab !== 'config') {
-    switchTab('config');
-    await new Promise(r => setTimeout(r, 200));
+  if (_savingAll) return;
+  _savingAll = true;
+  try {
+    // 刚登录还没进过数据页时先补拉一次，避免用空表单覆盖服务器配置
+    if (!_gameConfigLoaded) await loadGameConfig();
+    if (!_gameConfigLoaded) return toast('配置加载失败，未保存', 'err', 2200);
+    if (typeof saveGameConfig !== 'function') return toast('当前页面无保存逻辑', 'err');
+    await saveGameConfig();
+  } catch (e) {
+    console.error('[quickSaveAll]', e);
+    toast('保存失败：' + (e.message || e), 'err', 2600);
+  } finally {
+    _savingAll = false;
   }
-  if (typeof saveGameConfig !== 'function') return toast('当前页面无保存逻辑');
-  await saveGameConfig();
-  toast('已保存当前设置到服务器', 'ok', 2000);
 }
 $("loginPass").addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
@@ -6194,7 +6232,7 @@ async function resetTreasureDaily() {
 // ============ 数据设置（game_config）============
 async function loadGameConfig() {
   const res = await api('/api/admin/getGameConfig');
-  if (res.error) return toast('加载失败：' + res.error, 'err');
+  if (res.error) { _gameConfigLoaded = false; return toast('加载失败：' + res.error, 'err'); }
   const c = res.config || {};
   // 偷窃
   $("cfg_steal_enabled").value = c.steal_enabled ? '1' : '0';
@@ -6225,6 +6263,7 @@ async function loadGameConfig() {
   if ($("cfg_start_bgm_volume")) $("cfg_start_bgm_volume").value = (c.start_bgm_volume != null ? c.start_bgm_volume : 60);
   if ($("cfg_attr_dice")) $("cfg_attr_dice").value = (c.attr_dice_sides != null ? c.attr_dice_sides : 14);
   if ($("cfg_dynamic_map_enabled")) $("cfg_dynamic_map_enabled").value = (c.dynamic_map_enabled === false) ? '0' : '1';
+  if ($("cfg_wheel_spin_mode")) $("cfg_wheel_spin_mode").value = (c.wheel_spin_mode === 'on' || c.wheel_spin_mode === 'off') ? c.wheel_spin_mode : 'player';
   $("cfg_bgm_default_volume").value = c.bgm_default_volume != null ? c.bgm_default_volume : 60;
   $("cfg_world_channel_enabled").value = c.world_channel_enabled ? '1' : '0';
   $("cfg_special_mall_enabled").value = c.special_mall_enabled ? '1' : '0';
@@ -6287,6 +6326,20 @@ async function loadGameConfig() {
   if ($("cfg_chest_prob_epic")) $("cfg_chest_prob_epic").value = c.chest_prob_epic != null ? c.chest_prob_epic : 5;
   // ★ 自动清理参数回填
   fillAutoCleanInputs(c);
+  // ★ 公告页跳转按钮也属于统一保存范围，未进过公告页时也必须先回填
+  const _annLinksEl = $("cfg_announcement_links");
+  if (_annLinksEl) {
+    _annLinksEl.value = String(c.announcement_links || '');
+    try { renderAnnLinksPreview(_annLinksEl.value); } catch (e) { }
+  }
+  _gameConfigLoaded = true;
+}
+
+async function setWheelSpinMode(mode) {
+  if (mode !== 'on' && mode !== 'off') mode = 'player';
+  const el = $("cfg_wheel_spin_mode");
+  if (el) el.value = mode;
+  await saveGameConfig();
 }
 
 async function saveGameConfig() {
@@ -6311,6 +6364,11 @@ async function saveGameConfig() {
     dice_pvp_loser_type: $("cfg_dice_pvp_loser_type").value === 'gold' ? 'gold' : 'stock',
     dice_pvp_loser_value: getInt("cfg_dice_pvp_loser_value", 2),
     bgm_enabled: $("cfg_bgm_enabled").value === '1',
+    wheel_spin_mode: (function () {
+      const el = $("cfg_wheel_spin_mode");
+      const v = el ? el.value : 'player';
+      return (v === 'on' || v === 'off') ? v : 'player';
+    })(),
     start_bgm_enabled: ($("cfg_start_bgm_enabled") || {}).value === '1',
     start_bgm_volume: parseInt(($("cfg_start_bgm_volume") || {}).value) || 0,
     attr_dice_sides: parseInt(($("cfg_attr_dice") || {}).value) || 14,
@@ -6375,6 +6433,14 @@ async function saveGameConfig() {
     // 五子棋参数
     ...gmkCollectCfg(),
   };
+  // ★ 统一保存：自动清理 + 公告页跳转按钮也一起提交，左上角只发一次请求
+  fields.announcement_links = String((($("cfg_announcement_links") || {}).value) || '');
+  fields.auto_clean_enabled = (($("cfg_auto_clean_enabled") || {}).value === "1");
+  fields.auto_clean_interval_hours = getInt("cfg_auto_clean_interval_hours", 12);
+  fields.auto_clean_batch = getInt("cfg_auto_clean_batch", 200);
+  AUTO_CLEAN_DAY_FIELDS.forEach(function (row) {
+    fields[row[1]] = getInt(row[0], row[2]);
+  });
   // 前端兜底：偷窃范围夹紧 1-100，且 min<=max
   if (fields.steal_min < 1) fields.steal_min = 1;
   if (fields.steal_max > 100) fields.steal_max = 100;
