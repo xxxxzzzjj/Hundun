@@ -1941,8 +1941,7 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   font-size:5.2vw; font-weight:bold; color:#8a6a3c;
   overflow:hidden; box-shadow:0 .6vw 1.6vw rgba(120,95,60,.20); }
 .gmk-pname { font-size:3.2vw; color:#5c4632; font-weight:bold; max-width:26vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.gmk-pstate { font-size:2.8vw; color:#9a7b52; }
-.gmk-pstate.on { color:#c8862c; font-weight:bold; }
+.gmk-av.offline { opacity:.45; filter:grayscale(.55); }
 .gmk-center { text-align:center; flex:0 0 auto; }
 .gmk-ctitle { font-size:2.8vw; color:#5c4632; }
 .gmk-timer { font-size:8vw; line-height:1.05; color:#c4963c; font-weight:bold; }
@@ -4322,7 +4321,6 @@ div:has(> #annSearchInput) {
           <div class="gmk-av" id="gmkAvL"></div>
           <div>
             <div class="gmk-pname" id="gmkNameL">--</div>
-            <div class="gmk-pstate" id="gmkStateL">--</div>
           </div>
         </div>
         <div class="gmk-center">
@@ -4333,7 +4331,6 @@ div:has(> #annSearchInput) {
           <div class="gmk-av" id="gmkAvR"></div>
           <div style="text-align:right;">
             <div class="gmk-pname" id="gmkNameR">--</div>
-            <div class="gmk-pstate" id="gmkStateR">--</div>
           </div>
         </div>
       </div>
@@ -14415,6 +14412,8 @@ loadGameConfig();
     pendingPicked: [],  // 多目标卡已经点过的格子
     peekShownAt: 0,     // 透视弹窗只弹一次
     reviewModalOpen: false,   // 防"对方的下注"确认窗重复弹
+    handEpoch: 0,             // 用卡/刷新后忽略仍在路上的旧轮询，防止旧手牌回填
+    prefsLoaded: false,       // 五子棋玩家偏好是否已从后台读取
   };
   window._gmk = G;
 
@@ -14503,10 +14502,13 @@ loadGameConfig();
 
   function gmkPollOnce() {
     if (!anyLayerOpen() || !G.roomId) return;
+    var epoch = G.handEpoch || 0;
     var watch = (G.mode === 'watch') ? '&watch=1' : '';
     var needAv = ((G.mode === 'game' || G.mode === 'watch') && !G.avatarLoaded) ? '&avatar=1' : '';
     api('/api/gomoku/state?dm=' + encodeURIComponent(curId) + '&roomId=' + encodeURIComponent(G.roomId) + watch + needAv)
       .then(function (res) {
+        // 用卡/刷新成功后，之前发出的轮询可能带着旧手牌晚到；直接丢弃
+        if ((G.handEpoch || 0) !== epoch) return;
         if (!res || !res.ok || !res.room) {
           if (res && res.error && G.mode !== 'lobby') { gmkSysbar('系统提示：' + res.error); }
           return;
@@ -14575,6 +14577,7 @@ loadGameConfig();
   window.showGomokuLobby = function () {
     G.mode = 'lobby';
     layerOpen('gmkLobby');
+    gmkLoadPrefs();
     startPoll(3000);
     gmkLoadFriends();
     gmkLoadRooms();
@@ -14990,6 +14993,7 @@ loadGameConfig();
   };
 
   window.gmkEnterGame = function () {
+    gmkLoadPrefs();
     gmkPost('/api/gomoku/ready', { roomId: G.roomId }).then(function (res) {
       if (!res || res.error) { toast(res && res.error ? res.error : '进入失败', 'err', 2600); return; }
       if (res.started) {
@@ -15290,10 +15294,16 @@ loadGameConfig();
     var rMy = !watch && (R.uid === myUid);
     var lTurn = room.status === 'playing' && room.turn === L.uid;
     var rTurn = room.status === 'playing' && room.turn === R.uid;
-    var ls = document.getElementById('gmkStateL');
-    var rs = document.getElementById('gmkStateR');
-    if (ls) { ls.textContent = lTurn ? '● 该他落子' : (L.online ? '等待中' : '已掉线'); ls.className = 'gmk-pstate' + (lTurn ? ' on' : ''); }
-    if (rs) { rs.textContent = rTurn ? '● 该他落子' : (R.online ? '等待中' : '已掉线'); rs.className = 'gmk-pstate' + (rTurn ? ' on' : ''); }
+    var lAvEl = document.getElementById('gmkAvL');
+    var rAvEl = document.getElementById('gmkAvR');
+    if (lAvEl) {
+      lAvEl.classList.toggle('turn', lTurn);
+      lAvEl.classList.toggle('offline', !L.online);
+    }
+    if (rAvEl) {
+      rAvEl.classList.toggle('turn', rTurn);
+      rAvEl.classList.toggle('offline', !R.online);
+    }
 
     var bottom = document.getElementById('gmkBottom');
     var watchbar = document.getElementById('gmkWatchBar');
@@ -15365,12 +15375,7 @@ loadGameConfig();
       }
     }
 
-    var myAvId = (me.side === 1) ? 'gmkAvL' : 'gmkAvR';
-    var oppAvId = (me.side === 1) ? 'gmkAvR' : 'gmkAvL';
-    var myAvEl = document.getElementById(myAvId);
-    var oppAvEl = document.getElementById(oppAvId);
-    if (myAvEl) { if (me.my_turn && room.status === 'playing' && !me.is_spectator) myAvEl.classList.add('turn'); else myAvEl.classList.remove('turn'); }
-    if (oppAvEl) oppAvEl.classList.remove('turn');
+
   };
 
   // ---------- 棋盘绘制 ----------
@@ -15453,9 +15458,20 @@ loadGameConfig();
         else { ctx.fillStyle = 'rgba(90,70,50,.85)'; ctx.fillRect(cx - r, cy - r, r * 2, r * 2); }
         continue;
       }
-      // 棋子
+      // 棋子：先在外侧画一层柔和的落影，再画棋子本体
       var key = (ch === 'b') ? 'black' : 'white';
       var pim = img(key);
+      ctx.save();
+      ctx.shadowColor = 'rgba(18, 24, 16, .40)';
+      ctx.shadowBlur = Math.max(2, cell * 0.20);
+      ctx.shadowOffsetX = Math.max(1, cell * 0.045);
+      ctx.shadowOffsetY = Math.max(2, cell * 0.075);
+      ctx.fillStyle = 'rgba(22, 28, 18, .22)';
+      ctx.beginPath();
+      ctx.ellipse(cx + cell * 0.035, cy + cell * 0.075, r * 1.02, r * 0.82, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, r * 1.05, 0, Math.PI * 2); ctx.clip();
       ctx.fillStyle = (ch === 'b') ? 'rgba(40,60,45,.35)' : 'rgba(40,60,45,.25)';
@@ -15498,6 +15514,16 @@ loadGameConfig();
       var pmx = ox + pmc * cell, pmy = oy + pmr * cell;
       var meCh2 = (G.room && G.room.me && G.room.me.char) || 'b';
       var pimg = img(meCh2 === 'b' ? 'black' : 'white');
+      ctx.save();
+      ctx.shadowColor = 'rgba(18, 24, 16, .30)';
+      ctx.shadowBlur = Math.max(2, cell * 0.18);
+      ctx.shadowOffsetX = Math.max(1, cell * 0.04);
+      ctx.shadowOffsetY = Math.max(2, cell * 0.06);
+      ctx.fillStyle = 'rgba(22, 28, 18, .16)';
+      ctx.beginPath();
+      ctx.ellipse(pmx + cell * 0.035, pmy + cell * 0.075, r * 1.02, r * 0.82, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       ctx.globalAlpha = 0.6;
       if (pimg && pimg._ok) ctx.drawImage(pimg, pmx - r * 1.2, pmy - r * 1.2, r * 2.4, r * 2.4);
       else {
@@ -15624,8 +15650,20 @@ loadGameConfig();
     gmkRedraw();
   }
   function gmkConfirmOn() {
-    try { return localStorage.getItem('gomoku_confirm_move') !== '0'; } catch (e) { return true; }
+    // 默认关闭（防误触靠“关闭二次确认”即点即落，玩家想确认再自己开）
+    try { return localStorage.getItem('gomoku_confirm_move') === '1'; } catch (e) { return false; }
   }
+  function gmkLoadPrefs() {
+    if (G.prefsLoaded || !curId) return;
+    G.prefsLoaded = true;
+    api('/api/gomoku/prefs?dm=' + encodeURIComponent(curId))
+      .then(function (res) {
+        if (!res || res.error || typeof res.confirm_move !== 'boolean') return;
+        try { localStorage.setItem('gomoku_confirm_move', res.confirm_move ? '1' : '0'); } catch (e) { }
+      })
+      .catch(function () { });
+  }
+
   function bindCanvas() {
     var canvas = document.getElementById('gmkCanvas');
     if (!canvas || canvas._gmkBound) return;
@@ -15829,6 +15867,14 @@ window.gmkDoUseCard = function (cardId, target, targets) {
         } catch (e) { }
         G.selCard = ''; G.pendingEffect = ''; G.pendingCardId = '';
         G.pendingQueue = null; G.pendingStep = 0; G.pendingTargets = [];
+        G.handEpoch = (G.handEpoch || 0) + 1;   // 作废用卡前发出的旧轮询
+        // 先本地移出手牌，不等下一次轮询；服务端仍会返回真实手牌覆盖
+        try {
+          if (G.room && G.room.me && Array.isArray(G.room.me.hand)) {
+            G.room.me.hand = G.room.me.hand.filter(function (x) { return x.id !== cardId; });
+            gmkRenderGame();
+          }
+        } catch (e) { }
         gmkPollOnce();
       });
     };;
@@ -15861,6 +15907,7 @@ window.gmkDoUseCard = function (cardId, target, targets) {
         toast('已刷新，消耗 ' + res.cost + ' 张抽奖券', 'ok', 1800);
         window._gmkSnd('card');
         G.selCard = ''; G.pendingEffect = '';
+        G.handEpoch = (G.handEpoch || 0) + 1;
         gmkPollOnce();
       });
     }, '确定刷新');
@@ -15963,6 +16010,10 @@ window.gmkDoUseCard = function (cardId, target, targets) {
         gmkCloseModal();
         if (window._gmkSyncBgm) window._gmkSyncBgm();
         toast('已保存设置', 'ok', 1400);
+        // 落子二次确认偏好同步到后台，后台可记录/查看
+        try {
+          api('/api/gomoku/prefs', { dm: curId, confirm_move: !!(cf && cf.checked) }).catch(function () { });
+        } catch (e) { }
       }, '保存', null, false, function () { });
   };
 

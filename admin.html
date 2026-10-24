@@ -1219,14 +1219,15 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <div class="form-row">
         <div>
           <label style="display:flex;align-items:center;gap:1vw;cursor:pointer;">
-            <input type="checkbox" id="cfg_gomoku_card_consume" style="width:4vw;height:4vw;"> 🗑 用掉的卡从本局卡池移除（本局不会再刷到）
+            <input type="checkbox" id="cfg_gomoku_card_consume" style="width:4vw;height:4vw;" checked disabled> 🗑 用卡后必定消耗手牌（固定开启）
           </label>
         </div>
         <div></div>
       </div>
       <div style="font-size:2.6vw;color:rgba(255,255,255,.45);margin-top:1vw;line-height:1.7;">
         💡 道具下注价值默认取「商店售价」；没有售价的道具不能下注。绑定类 / 不可赠送道具系统已自动禁止下注。<br>
-        💡 棋盘 16 列 × 20 排交叉点，黑先；猜拳胜者执黑；平局赌注全退；一方掉线超过「掉线判负秒数」判负。
+        💡 棋盘 16 列 × 20 排交叉点，黑先；猜拳胜者执黑；平局赌注全退；一方掉线超过「掉线判负秒数」判负。<br>
+        💡 技能卡使用后必定消耗手牌；刷新时只会抽到该玩家本局还有剩余次数的卡。
       </div>
     </div>
 
@@ -2091,6 +2092,7 @@ async function editPlayer(p) {
         <div style="font-size:4.4vw;font-weight:bold;color:#ff4d5a;">${escapeHtml(p.name||'--')}</div>
         <div style="font-size:2.8vw;color:rgba(255,255,255,.4);">账号：<span style="font-family:monospace;">${escapeHtml(id)}</span></div>
         <div style="font-size:2.8vw;color:rgba(255,255,255,.4);margin-top:.5vw;">最近在线：${fmtRel(p.last_seen)}</div>
+        <div style="font-size:2.8vw;color:rgba(255,255,255,.4);margin-top:.5vw;">五子棋落子确认：<b style="color:${(p.gomoku_confirm_move === true || p.gomoku_confirm_move === 1 || p.gomoku_confirm_move === '1') ? '#8effa8' : '#ffd700'};">${(p.gomoku_confirm_move === true || p.gomoku_confirm_move === 1 || p.gomoku_confirm_move === '1') ? '开启' : '关闭（默认）'}</b></div>
         ${workingHtml}
       </div>
     </div>
@@ -2197,11 +2199,11 @@ async function openEditDmPanel(id, currentDm, name) {
     <div style="font-size:3vw;color:rgba(255,255,255,.6);margin-bottom:2vw;line-height:1.6;">
       玩家：<b style="color:#fff;">${escapeHtml(name||id)}</b><br>
       当前登录账号：<span style="font-family:monospace;color:#0ff;">${escapeHtml(currentDm)}</span><br>
-      ✅ 新账号：1~5 位英文或数字；旧账号会自动记录，老玩家输入旧账号时会提示新账号。
+      ✅ 新账号：1~5 位英文或数字；只记录最近一次旧账号，更早的旧账号会按未注册处理。
     </div>
     <div class="form-row full"><div><label>新 DM（1~5 位英文或数字，不能与现有玩家重复）</label>
       <input id="new_dm_input" value="" placeholder="例: abc12 / 12345" maxlength="5" pattern="[A-Za-z0-9]{1,5}" autocomplete="off"></div></div>
-    <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">💡 修改后该玩家所有数据自动迁移；旧账号会保留为登录别名，不会被直接遗忘。</div>
+    <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">💡 修改后该玩家所有数据自动迁移；只保留最近一次旧账号作为提示，历史更早账号不再被记住。</div>
   `, async () => {
     const newDm = ($("new_dm_input").value || '').trim();
     if (!newDm) return toast('请填写新 DM', 'err');
@@ -7241,6 +7243,8 @@ function gmkFillCfgForm(c) {
   setB('cfg_gomoku_use_card_ends_turn', false);
   setB('cfg_gomoku_card_allow_dup', true);
   setB('cfg_gomoku_card_consume', true);
+  var _gmkConsumeEl = $('cfg_gomoku_card_consume');
+  if (_gmkConsumeEl) { _gmkConsumeEl.checked = true; _gmkConsumeEl.disabled = true; }
 }
 
 function gmkCollectCfg() {
@@ -7259,7 +7263,7 @@ function gmkCollectCfg() {
     gomoku_bet_enabled: gb('cfg_gomoku_bet_enabled', true),
     gomoku_use_card_ends_turn: gb('cfg_gomoku_use_card_ends_turn', false),
     gomoku_card_allow_dup: gb('cfg_gomoku_card_allow_dup', true),
-    gomoku_card_consume: gb('cfg_gomoku_card_consume', true)
+    gomoku_card_consume: true
   };
 }
 
