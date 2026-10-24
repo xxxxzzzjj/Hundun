@@ -14577,7 +14577,7 @@ loadGameConfig();
   window.showGomokuLobby = function () {
     G.mode = 'lobby';
     layerOpen('gmkLobby');
-    gmkLoadPrefs();
+    try { if (window.gmkLoadPrefs) window.gmkLoadPrefs(); } catch (e) { }
     startPoll(3000);
     gmkLoadFriends();
     gmkLoadRooms();
@@ -14993,7 +14993,8 @@ loadGameConfig();
   };
 
   window.gmkEnterGame = function () {
-    gmkLoadPrefs();
+    // 偏好读取失败绝不能阻断“进入对局”
+    try { if (window.gmkLoadPrefs) window.gmkLoadPrefs(); } catch (e) { }
     gmkPost('/api/gomoku/ready', { roomId: G.roomId }).then(function (res) {
       if (!res || res.error) { toast(res && res.error ? res.error : '进入失败', 'err', 2600); return; }
       if (res.started) {
@@ -15650,19 +15651,25 @@ loadGameConfig();
     gmkRedraw();
   }
   function gmkConfirmOn() {
-    // 默认关闭（防误触靠“关闭二次确认”即点即落，玩家想确认再自己开）
+    // 默认关闭：点棋盘直接落子；想要二次确认的玩家自己在设置里开启
     try { return localStorage.getItem('gomoku_confirm_move') === '1'; } catch (e) { return false; }
   }
-  function gmkLoadPrefs() {
-    if (G.prefsLoaded || !curId) return;
+  // 定义在第二个 IIFE 里，但进入对局的按钮在第一个 IIFE：
+  // 必须挂到 window，否则会报 gmkLoadPrefs is not defined。
+  window.gmkLoadPrefs = function () {
+    if (!curId) return;
+    if (G.prefsLoaded && G.prefsFor === curId) return;
     G.prefsLoaded = true;
-    api('/api/gomoku/prefs?dm=' + encodeURIComponent(curId))
-      .then(function (res) {
-        if (!res || res.error || typeof res.confirm_move !== 'boolean') return;
-        try { localStorage.setItem('gomoku_confirm_move', res.confirm_move ? '1' : '0'); } catch (e) { }
-      })
-      .catch(function () { });
-  }
+    G.prefsFor = curId;
+    try {
+      api('/api/gomoku/prefs?dm=' + encodeURIComponent(curId))
+        .then(function (res) {
+          if (!res || res.error || typeof res.confirm_move !== 'boolean') return;
+          try { localStorage.setItem('gomoku_confirm_move', res.confirm_move ? '1' : '0'); } catch (e) { }
+        })
+        .catch(function () { });
+    } catch (e) { }
+  };
 
   function bindCanvas() {
     var canvas = document.getElementById('gmkCanvas');
