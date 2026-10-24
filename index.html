@@ -81,7 +81,8 @@ html, body {
 
 .start-title { margin-top:24vh; font-weight:900; letter-spacing:.3em; text-indent:.3em;
 
-  font-size:6.8vw; color:#fff; text-shadow:0 0 14px rgba(255,50,50,.9),0 2px 6px #000; }
+  /* 比原来缩小 1/3：6.8vw × 2/3 ≈ 4.53vw */
+  font-size:4.53vw; color:#fff; text-shadow:0 0 14px rgba(255,50,50,.9),0 2px 6px #000; }
 
 .start-title.glitch { position:relative; display:inline-block; }
 
@@ -134,7 +135,7 @@ html, body {
 
 .hint:empty { display:none; }
 
-.notice { margin-top:auto; margin-bottom:10vh; width:86vw; max-width:460px;
+.notice { margin-top:auto; margin-bottom:calc(10vh + 2 * clamp(42px, 12vw, 58px)); width:86vw; max-width:460px;
 
   background:transparent; border:none; box-shadow:none; border-radius:0;
 
@@ -217,7 +218,12 @@ html, body {
 
 /* ===== 大厅??===== */
 
-#hallPage { background:url('hall_bg.png') center/cover no-repeat; position:relative; isolation:isolate; }
+#hallPage { background:#07050b; position:relative; isolation:isolate; }
+/* 背景图固定到视口，不随帖子分区/内容高度变化而移动 */
+#hallPage::before {
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:url('hall_bg.png') center/cover no-repeat;
+}
 
 /* 背景特效层：闪电 + 电子粒子 + 数据流，位于背景图之上、内容之下 */
 #hallFx {
@@ -399,27 +405,42 @@ html, body {
 
 .player-dot { width:80%; height:80%; border-radius:50%;
 
+  position:relative; --pin-color:#fff;
+
   display:flex; align-items:center; justify-content:center;
 
   color:#fff; font-weight:bold; font-size:3vw; line-height:1;
 
-  border:3px solid rgba(255,255,255,.92);
+  border:1.5px solid rgba(255,255,255,.95);
 
-  box-shadow:0 0 0 2px rgba(0,0,0,.55), 0 0 12px rgba(255,255,255,.45), 0 2px 8px rgba(0,0,0,.7);
+  box-shadow:0 0 0 1px rgba(0,0,0,.65), 0 0 9px var(--pin-color), 0 2px 7px rgba(0,0,0,.7);
 
   transition:transform .15s; }
+
+.player-dot::after {
+  content:""; position:absolute; inset:-4px; border-radius:50%;
+  border:1.5px solid var(--pin-color);
+  box-shadow:0 0 12px var(--pin-color), inset 0 0 8px var(--pin-color);
+  pointer-events:none; opacity:.85;
+  animation:pinAura 1.15s ease-in-out infinite;
+}
+
+@keyframes pinAura {
+  0%,100% { transform:scale(.88); opacity:.28; }
+  50% { transform:scale(1.28); opacity:1; }
+}
 
 .player-dot:active { transform:scale(.92); }
 
 /* 自己=红，好友=绿，陌生人（模式人）=灰；同一格子有陌生人时灰色为??*/
 
-.player-dot.me      { background:radial-gradient(circle at 35% 30%,#ff8a96,#e62836 70%); }
+.player-dot.me      { --pin-color:#ff4d5a; background:radial-gradient(circle at 35% 30%,#ff8a96,#e62836 70%); }
 
-.player-dot.friend  { background:radial-gradient(circle at 35% 30%,#7dfca0,#1f7a36 70%); }
+.player-dot.friend  { --pin-color:#2ee84e; background:radial-gradient(circle at 35% 30%,#7dfca0,#1f7a36 70%); }
 
-.player-dot.stranger{ background:radial-gradient(circle at 35% 30%,#bcbcc4,#6a6a72 70%); opacity:.85; }
+.player-dot.stranger{ --pin-color:#d5dbe8; background:radial-gradient(circle at 35% 30%,#bcbcc4,#6a6a72 70%); opacity:.85; }
 
-.player-dot .num { font-size:2.8vw; text-shadow:0 1px 2px rgba(0,0,0,.5); }
+.player-dot .num { font-size:2.8vw; text-shadow:0 1px 2px rgba(0,0,0,.5); position:relative; z-index:1; }
 
 /* 兜底：现代浏览器用容器查询单位，始终取格子的短边，圆点不会再被拉成椭圆 */
 @supports (width: 1cqw) {
@@ -457,61 +478,111 @@ html, body {
 
 
 
-/* 私聊窗口（浮动，可多开??/
-
-.chat-box { position:fixed; right:2vw; bottom:2vw; width:80vw; max-width:380px;
-
-  height:65vh; background:rgba(20,18,28,.98); border:1px solid #2ee84e;
-
-  border-radius:12px; display:flex; flex-direction:column;
-
-  z-index:80; box-shadow:0 4px 20px rgba(0,0,0,.6); }
-
-.chat-box:nth-of-type(2) { right:2vw; bottom:calc(65vh + 3vw); }
-
-.chat-box:nth-of-type(3) { right:2vw; bottom:calc(130vh + 4vw); }
-
-.chat-head { padding:2.5vw 3vw; background:rgba(46,232,78,.1);
-
-  border-bottom:1px solid rgba(46,232,78,.2);
-
-  display:flex; justify-content:space-between; align-items:center;
-
-  font-size:3.4vw; color:#fff; }
-
-.chat-close { font-size:5vw; color:rgba(255,255,255,.5); cursor:pointer;
-
-  padding:0 1.5vw; line-height:1; }
-
-.chat-close:hover { color:#fff; }
-
-.chat-msgs { flex:1; overflow-y:auto; padding:2vw 3vw; }
-
-.chat-msg { margin-bottom:2vw; display:flex; flex-direction:column; }
-
+/* 私聊窗口：高端弹出层，永远在最前 */
+.chat-overlay {
+  position:fixed; inset:0; z-index:150; display:none;
+  align-items:center; justify-content:center; padding:4vw;
+  background:rgba(3,5,10,.62);
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+}
+.chat-overlay.show { display:flex; }
+.chat-box {
+  position:relative; width:min(94vw, 460px); height:min(72vh, 640px);
+  max-height:calc(100vh - 8vw);
+  display:flex; flex-direction:column; overflow:hidden;
+  border-radius:20px;
+  background:linear-gradient(165deg, rgba(36,29,18,.985), rgba(9,10,16,.995));
+  border:1px solid rgba(255,215,0,.34);
+  box-shadow:0 24px 80px rgba(0,0,0,.72), 0 0 0 1px rgba(255,255,255,.04), 0 0 34px rgba(255,215,0,.13);
+  animation:chatIn .2s cubic-bezier(.22,1,.36,1);
+}
+@keyframes chatIn { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
+.chat-head {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:2vw;
+  padding:2.4vw 3vw;
+  background:linear-gradient(180deg, rgba(255,215,0,.13), rgba(0,0,0,.18));
+  border-bottom:1px solid rgba(255,215,0,.18);
+}
+.chat-peer { display:flex; align-items:center; gap:2.2vw; min-width:0; }
+.chat-avatar {
+  width:10vw; height:10vw; max-width:44px; max-height:44px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  color:#3a2600; font-weight:900; font-size:4.2vw;
+  background:linear-gradient(135deg,#ffe27a,#c9971d);
+  box-shadow:0 0 0 2px rgba(255,215,0,.25), 0 0 16px rgba(255,215,0,.2);
+}
+.chat-peer-name { color:#fff; font-weight:800; font-size:3.4vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chat-peer-status { color:#2ee84e; font-size:2.3vw; margin-top:.35vw; letter-spacing:.04em; }
+.chat-close {
+  width:8vw; height:8vw; max-width:32px; max-height:32px; flex-shrink:0;
+  border:1px solid rgba(255,255,255,.15); border-radius:50%;
+  background:rgba(255,255,255,.06); color:rgba(255,255,255,.7);
+  font-size:4vw; line-height:1; cursor:pointer;
+}
+.chat-close:active { background:rgba(255,215,0,.2); color:#fff; }
+.chat-msgs {
+  flex:1; overflow-y:auto; padding:3vw;
+  background:radial-gradient(circle at 50% 0%, rgba(255,215,0,.05), transparent 60%);
+}
+.chat-msg { margin-bottom:2.4vw; display:flex; flex-direction:column; }
 .chat-msg.mine { align-items:flex-end; }
-
 .chat-msg.theirs { align-items:flex-start; }
-
-.chat-bubble { padding:1.5vw 2.5vw; border-radius:8px; max-width:70%;
-
-  font-size:3.4vw; line-height:1.5; word-break:break-word; }
-
-.chat-msg.mine .chat-bubble { background:linear-gradient(180deg,#34d058,#1f7a36); color:#fff; }
-
-.chat-msg.theirs .chat-bubble { background:rgba(255,255,255,.1); color:#fff; }
-
-.chat-time { font-size:2.4vw; color:rgba(255,255,255,.3); margin-top:.5vw; }
-
-.chat-input-row { display:flex; gap:1.5vw; padding:2vw; border-top:1px solid rgba(255,255,255,.1); }
-
-.chat-input-row input { flex:1; padding:1.5vw 2vw; background:#222; color:#fff;
-
-  border:1px solid rgba(255,255,255,.15); border-radius:6px; font-size:3.2vw; }
-
-.chat-input-row button { padding:1.5vw 3vw; background:linear-gradient(180deg,#34d058,#1f7a36);
-
-  color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:3.2vw; cursor:pointer; }
+.chat-bubble {
+  padding:1.8vw 2.8vw; border-radius:14px; max-width:78%;
+  font-size:3.4vw; line-height:1.55; word-break:break-word;
+  border:1px solid transparent;
+}
+.chat-msg.mine .chat-bubble {
+  background:linear-gradient(135deg,#ffe27a,#d4a51f); color:#2a1a00;
+  border-color:rgba(255,255,255,.28);
+  box-shadow:0 4px 16px rgba(255,215,0,.18);
+}
+.chat-msg.theirs .chat-bubble {
+  background:rgba(255,255,255,.075); color:rgba(255,255,255,.94);
+  border-color:rgba(160,210,255,.2);
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
+.chat-time { font-size:2.25vw; color:rgba(255,255,255,.3); margin-top:.5vw; }
+.chat-compose { position:relative; flex-shrink:0; }
+.chat-input-row {
+  display:flex; align-items:center; gap:1.5vw; padding:2vw;
+  border-top:1px solid rgba(255,255,255,.1);
+  background:rgba(4,6,11,.72);
+}
+.chat-input-row input {
+  flex:1; min-width:0; padding:1.8vw 2.6vw;
+  background:rgba(255,255,255,.06); color:#fff;
+  border:1px solid rgba(255,215,0,.2); border-radius:999px;
+  font-size:3.2vw; outline:none;
+}
+.chat-emoji-btn, .chat-send {
+  flex-shrink:0; border-radius:999px; cursor:pointer; font-weight:800;
+}
+.chat-emoji-btn {
+  width:9vw; height:9vw; max-width:38px; max-height:38px;
+  border:1px solid rgba(255,215,0,.25); background:rgba(255,215,0,.08);
+  font-size:4.5vw;
+}
+.chat-send {
+  padding:1.8vw 3vw; border:none; color:#2a1a00;
+  background:linear-gradient(135deg,#ffe27a,#c9971d);
+  box-shadow:0 4px 14px rgba(255,215,0,.2);
+  font-size:3.1vw;
+}
+.chat-emoji-panel {
+  position:absolute; left:2vw; right:2vw; bottom:calc(100% + 1.5vw);
+  display:none; grid-template-columns:repeat(7,1fr); gap:.8vw;
+  max-height:28vh; overflow-y:auto; padding:2vw;
+  background:rgba(18,17,26,.99); border:1px solid rgba(255,215,0,.25);
+  border-radius:14px; box-shadow:0 12px 38px rgba(0,0,0,.65); z-index:5;
+}
+.chat-emoji-panel.show { display:grid; }
+.chat-emoji-panel button {
+  border:1px solid rgba(255,255,255,.06); border-radius:10px;
+  background:rgba(255,255,255,.04); font-size:4.4vw; padding:1.2vw 0;
+  cursor:pointer; line-height:1.2;
+}
+.chat-emoji-panel button:active { background:rgba(255,215,0,.16); }
 
 
 
@@ -1071,6 +1142,25 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 .profile-bar.green .pbar-track i { background:linear-gradient(90deg,#20d84a,#9bff8a); box-shadow:0 0 12px rgba(46,232,78,.8); }
 @keyframes pbarShine { to { transform:translateX(100%); } }
 
+/* 蓝条 / 血量 / 八属性的细边框流光：只走边缘，不盖文字 */
+.pbar-track { position:relative; }
+.pbar-track::before,
+.stats-box .stat-item::after {
+  content:""; position:absolute; inset:0; border-radius:inherit; padding:1px;
+  pointer-events:none; z-index:2;
+  background-size:220% 100%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite:exclude;
+  animation:uiEdgeFlow 3.8s linear infinite, uiEdgeBreath 3s ease-in-out infinite;
+}
+.pbar-blue::before { background-image:linear-gradient(90deg, transparent, rgba(110,245,255,.18), rgba(160,250,255,.9), rgba(77,140,255,.28), transparent); }
+.pbar-health::before { background-image:linear-gradient(90deg, transparent, rgba(46,232,78,.18), rgba(155,255,138,.85), rgba(255,215,0,.25), transparent); }
+.stats-box .stat-item::after { background-image:linear-gradient(90deg, transparent, rgba(110,245,255,.12), rgba(255,215,0,.55), rgba(110,245,255,.12), transparent); }
+@keyframes uiEdgeFlow { 0% { background-position:180% 0; } 100% { background-position:-180% 0; } }
+@keyframes uiEdgeBreath { 0%,100% { opacity:.35; } 50% { opacity:.9; } }
+
 #hallPage #content-profile .attrs-cols.attrs-info {
   grid-template-columns:repeat(2, minmax(0, 1fr)) !important; width:100% !important;
   padding:0 !important; border-radius:0;
@@ -1264,6 +1354,11 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   transform-origin:0 0;
 }
 .hall-hero.spinning .hero-orbit { animation-duration:.62s; }
+/* 旋转中滑动触发的纯本地彩蛋：再转一圈，不触发任何导航 */
+.hall-hero.fun-spin .hero-orbit { animation:heroOrbitSpin .62s cubic-bezier(.2,.8,.2,1) !important; }
+.hall-hero.fun-spin .hero-btn-inner { animation:heroCounterSpin .62s linear !important; }
+.hall-hero.spinning, .hall-hero.fun-spin { touch-action:none; }
+.hall-hero.fun-spin .hero-btn { pointer-events:none; }
 .hall-hero.no-spin .hero-orbit { animation:none !important; }
 .hall-hero.no-spin .hero-btn-inner { animation:heroBtnGlow 2.8s ease-in-out infinite !important; }
 .hero-btn {
@@ -1272,6 +1367,7 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   padding:0; border:none; background:transparent; cursor:pointer;
   transform:rotate(calc(-90deg + var(--i) * 45deg)) translateY(calc(var(--hero-r) * -1)) rotate(calc(90deg - var(--i) * 45deg));
   -webkit-tap-highlight-color:transparent;
+  touch-action:none;
 }
 .hero-btn::before {
   content:""; position:absolute; inset:-24%; border-radius:50%; pointer-events:none; z-index:0;
@@ -1359,15 +1455,16 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 }
 .notice-overlay.show { opacity:1; visibility:visible; pointer-events:auto; }
 .notice-drawer {
-  position:absolute; top:0; right:0; width:min(88vw, 420px); height:100%;
+  position:absolute; top:0; left:0; width:min(88vw, 420px); height:100%;
   padding:5vw 4vw; overflow-y:auto; -webkit-overflow-scrolling:touch;
   background:linear-gradient(170deg, rgba(28,25,38,.98), rgba(9,10,17,.99));
-  border-left:1px solid rgba(255,215,0,.22);
-  box-shadow:-20px 0 60px rgba(0,0,0,.55);
-  transform:translateX(100%); transition:transform .28s cubic-bezier(.22,1,.36,1);
+  border-right:1px solid rgba(255,215,0,.22);
+  box-shadow:20px 0 60px rgba(0,0,0,.55);
+  transform:translate3d(-102%,0,0); will-change:transform;
+  transition:transform .34s cubic-bezier(.22,1,.36,1);
 }
-.notice-overlay.show .notice-drawer { transform:translateX(0); }
-.notice-drawer-head { display:flex; justify-content:space-between; align-items:flex-start; gap:3vw; padding-bottom:3vw; border-bottom:1px solid rgba(255,255,255,.1); }
+.notice-overlay.show .notice-drawer { transform:translate3d(0,0,0); }
+.notice-drawer-head { display:flex; justify-content:flex-start; align-items:flex-start; gap:3vw; padding-bottom:3vw; border-bottom:1px solid rgba(255,255,255,.1); }
 .notice-drawer-title { font-size:4.4vw; font-weight:900; color:#ffd76a; letter-spacing:.08em; }
 .notice-drawer-sub { font-size:2.5vw; color:rgba(255,255,255,.4); margin-top:.8vw; }
 .notice-drawer-close { width:9vw; height:9vw; max-width:38px; max-height:38px; border-radius:50%;
@@ -1406,7 +1503,7 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 
     <div class="start-title glitch" data-t="· 验证身份 ·">· 验证身份 ·</div>
 
-    <div class="input-wrap"><input id="pid" type="text" maxlength="5" autocomplete="off" placeholder="玩家 ID"></div>
+    <div class="input-wrap"><input id="pid" type="text" maxlength="5" pattern="[A-Za-z0-9]{1,5}" inputmode="text" autocapitalize="off" spellcheck="false" autocomplete="off" placeholder="请输入账号" title="登录账号只能是 1~5 位英文或数字"></div>
 
     <button class="big-btn" onclick="verify()">进 入</button>
 
@@ -1660,12 +1757,12 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
       <div class="profile-bars">
         <div class="profile-bar blue">
           <span class="pbar-label">蓝条</span>
-          <div class="pbar-track"><i id="barBlueFill"></i></div>
+          <div class="pbar-track pbar-blue"><i id="barBlueFill"></i></div>
           <b id="barBlueText">--</b>
         </div>
         <div class="profile-bar green">
           <span class="pbar-label">血量</span>
-          <div class="pbar-track"><i id="barHealthFill"></i></div>
+          <div class="pbar-track pbar-health"><i id="barHealthFill"></i></div>
           <b id="barHealthText">--</b>
         </div>
       </div>
@@ -1679,14 +1776,14 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
       </div>
       <div class="stats-box">
         <div class="stats-grid">
-          <div class="stat-item"><span class="stat-name">🧠 精神</span><span class="stat-value" id="attr-spirit">--</span></div>
-          <div class="stat-item"><span class="stat-name">👁️ 感知</span><span class="stat-value" id="attr-sense">--</span></div>
-          <div class="stat-item"><span class="stat-name">💪 体魄</span><span class="stat-value" id="attr-body">--</span></div>
-          <div class="stat-item"><span class="stat-name">🏃 敏捷</span><span class="stat-value" id="attr-agile">--</span></div>
-          <div class="stat-item"><span class="stat-name">🌸 魅力</span><span class="stat-value" id="attr-charm">--</span></div>
-          <div class="stat-item"><span class="stat-name">🩸 血脉</span><span class="stat-value" id="attr-blood">--</span></div>
-          <div class="stat-item"><span class="stat-name">📖 悟性</span><span class="stat-value" id="attr-wisdom">--</span></div>
-          <div class="stat-item"><span class="stat-name">📜 觉悟</span><span class="stat-value" id="attr-enlighten">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">🧠 精神</span><span class="stat-value" id="attr-spirit">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">👁️ 感知</span><span class="stat-value" id="attr-sense">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">💪 体魄</span><span class="stat-value" id="attr-body">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">🏃 敏捷</span><span class="stat-value" id="attr-agile">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">🌸 魅力</span><span class="stat-value" id="attr-charm">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">🩸 血脉</span><span class="stat-value" id="attr-blood">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">📖 悟性</span><span class="stat-value" id="attr-wisdom">--</span></div>
+          <div class="stat-item stat-flow"><span class="stat-name">📜 觉悟</span><span class="stat-value" id="attr-enlighten">--</span></div>
         </div>
       </div>
       <div id="playerTitlesRow2" style="display:flex;flex-wrap:wrap;gap:1.1vw;justify-content:center;align-items:center;min-height:0;padding:0;margin:1.4vw 0 0;"></div>
@@ -1751,11 +1848,10 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 
         <div class="notice-drawer-title">消息中心</div>
 
-        <div class="notice-drawer-sub">系统 / 公告 · 私人消息 分区显示</div>
+        <div class="notice-drawer-sub">系统 / 公告 · 私人消息 分区显示<br><span style="font-size:2.2vw;color:rgba(255,255,255,.28);">点击右侧空白区域关闭</span></div>
 
       </div>
 
-      <button class="notice-drawer-close" onclick="closeNoticePanel()" aria-label="关闭">×</button>
 
     </div>
 
@@ -2086,6 +2182,80 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 #inlineSkillsHost .back-btn { display:none !important; }
 #inlineSkillsHost .pager-bar button { padding:1vw 2.8vw !important; font-size:2.3vw !important; }
 
+/* ===== 修行 · 高级金色；副业 · 银色边框，两组都有流动高光 ===== */
+#inlineSkillsHost .collapse-wrap.skill-sect-box,
+#inlineSkillsHost .collapse-wrap.skill-sidejob-box {
+  position:relative; overflow:hidden; padding:2.2vw !important;
+  isolation:isolate;
+}
+#inlineSkillsHost .collapse-wrap.skill-sect-box,
+#inlineSkillsHost .collapse-wrap.skill-sidejob-box {
+  border:1px solid transparent !important;
+  border-radius:14px !important;
+  margin-left:-1.7vw !important;
+  margin-right:-1.7vw !important;
+  padding:3vw !important;
+  background:rgba(9,11,17,.62) !important;
+  box-shadow:0 10px 30px rgba(0,0,0,.32) !important;
+}
+#inlineSkillsHost .collapse-wrap.skill-sect-box {
+  background:linear-gradient(180deg, rgba(36,29,13,.70), rgba(10,10,15,.82)) !important;
+  border-color:rgba(255,215,0,.28) !important;
+}
+#inlineSkillsHost .collapse-wrap.skill-sidejob-box {
+  background:linear-gradient(180deg, rgba(28,33,43,.72), rgba(10,12,18,.84)) !important;
+  border-color:rgba(215,230,250,.30) !important;
+}
+/* 只在边缘走光，不覆盖内容 */
+#inlineSkillsHost .skill-sect-box::before,
+#inlineSkillsHost .skill-sidejob-box::before {
+  content:""; position:absolute; inset:0; border-radius:inherit; padding:1.4px;
+  pointer-events:none; z-index:2;
+  background-size:240% 100%;
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite:exclude;
+  animation:skillBorderFlow 4.8s linear infinite;
+}
+#inlineSkillsHost .skill-sect-box::before {
+  background-image:linear-gradient(110deg, rgba(255,215,0,.18), rgba(255,241,170,.98) 24%, rgba(255,215,0,.2) 45%, rgba(255,255,255,.85) 62%, rgba(255,215,0,.24));
+}
+#inlineSkillsHost .skill-sidejob-box::before {
+  background-image:linear-gradient(110deg, rgba(190,210,235,.18), rgba(240,248,255,.98) 24%, rgba(190,210,235,.2) 45%, rgba(255,255,255,.8) 62%, rgba(190,210,235,.24));
+}
+/* 外侧呼吸光，只影响边框外缘 */
+#inlineSkillsHost .skill-sect-box::after,
+#inlineSkillsHost .skill-sidejob-box::after {
+  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; z-index:0;
+  animation:skillBorderBreath 3.2s ease-in-out infinite;
+}
+#inlineSkillsHost .skill-sect-box::after { box-shadow:0 0 18px rgba(255,215,0,.18); }
+#inlineSkillsHost .skill-sidejob-box::after { box-shadow:0 0 18px rgba(210,230,255,.18); }
+#inlineSkillsHost .skill-sect-box > *, #inlineSkillsHost .skill-sidejob-box > * { position:relative; z-index:1; }
+#inlineSkillsHost .skill-sect-box .collapse-head,
+#inlineSkillsHost .skill-sidejob-box .collapse-head {
+  border-radius:12px !important;
+  padding:1.2vw 2vw !important;
+  margin:-.35vw -.35vw 1.2vw !important;
+  border:1px solid rgba(255,255,255,.1);
+  background:rgba(0,0,0,.22);
+}
+#inlineSkillsHost .skill-sect-box .collapse-head { color:#ffe27a !important; text-shadow:0 1px 2px rgba(0,0,0,.8),0 0 10px rgba(255,215,0,.25); border-color:rgba(255,215,0,.26); }
+#inlineSkillsHost .skill-sidejob-box .collapse-head { color:#e4efff !important; text-shadow:0 1px 2px rgba(0,0,0,.8),0 0 10px rgba(205,225,255,.22); border-color:rgba(208,224,246,.28); }
+#inlineSkillsHost .skill-sidejob-box .collapse-arrow { color:rgba(220,236,255,.9) !important; }
+#inlineSkillsHost .skill-sect-row,
+#inlineSkillsHost .skill-sidejob-row {
+  border:1px solid rgba(255,255,255,.10) !important;
+  background:rgba(4,6,10,.34) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+#inlineSkillsHost .skill-sect-row { border-color:rgba(255,215,0,.18) !important; }
+#inlineSkillsHost .skill-sidejob-row { border-color:rgba(208,224,246,.22) !important; }
+#inlineSkillsHost .skill-sidejob-row .profile-skill-name { color:#e4efff !important; text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 8px rgba(205,225,255,.22); }
+@keyframes skillBorderFlow { 0% { background-position:180% 0; } 100% { background-position:-180% 0; } }
+@keyframes skillBorderBreath { 0%,100% { opacity:.35; } 50% { opacity:.95; } }
+
 .item-sheet-body {
   border-radius:12px; padding:2.4vw 2.6vw;
   background:linear-gradient(168deg, rgba(255,255,255,.055), rgba(255,255,255,.015) 60%, rgba(0,0,0,.18));
@@ -2392,6 +2562,94 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 }
 .attrs-col #playerTitlesRow2 > * { flex:0 0 auto !important; }
 .profile-top { align-items:stretch !important; }
+
+/* ══ 玩家信息头部：科技名片质感（只做边缘/纹理，不压文字）══ */
+#hallPage #content-profile .avatar-area {
+  position:relative; isolation:isolate; overflow:hidden;
+  padding:3.2vw !important;
+  border-radius:18px !important;
+  border:1px solid rgba(255,215,0,.20) !important;
+  background:
+    repeating-linear-gradient(0deg, rgba(120,220,255,.024) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(120,220,255,.018) 0 1px, transparent 1px 5px),
+    radial-gradient(circle at 8% 0%, rgba(255,215,0,.16), transparent 44%),
+    radial-gradient(circle at 100% 100%, rgba(255,77,90,.10), transparent 46%),
+    linear-gradient(135deg, rgba(25,24,32,.95), rgba(8,10,16,.975)) !important;
+  box-shadow:
+    0 18px 44px rgba(0,0,0,.44),
+    0 0 0 1px rgba(255,215,0,.08),
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 0 34px rgba(255,215,0,.035) !important;
+}
+#hallPage #content-profile .avatar-area::before {
+  content:""; position:absolute; inset:0; width:auto !important; height:auto !important;
+  border-radius:inherit; padding:1.35px;
+  pointer-events:none; z-index:3; background-size:260% 100%;
+  background-image:linear-gradient(110deg,
+    rgba(255,215,0,.25), rgba(255,242,170,.98) 20%,
+    rgba(255,255,255,.18) 34%, rgba(230,40,54,.72) 52%,
+    rgba(70,210,255,.55) 70%, rgba(255,215,0,.9) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite:exclude;
+  animation:nameCardEdge 5.6s linear infinite, nameCardBreath 3.6s ease-in-out infinite;
+}
+
+#hallPage #content-profile .avatar-area > * { position:relative; z-index:1; }
+#hallPage #content-profile .avatar-area .player-name {
+  background:linear-gradient(90deg,#ffe9a8 0%,#ff8fa3 28%,#7ee8ff 52%,#ffd700 76%,#ffe9a8 100%);
+  background-size:300% 100%;
+  -webkit-background-clip:text; background-clip:text;
+  color:transparent !important;
+  -webkit-text-fill-color:transparent;
+  text-shadow:none !important;
+  filter:drop-shadow(0 2px 5px rgba(0,0,0,.72)) drop-shadow(0 0 12px rgba(255,215,0,.24));
+  animation:nameRainbow 4.8s linear infinite;
+  padding-bottom:.7vw;
+}
+/* 长名字滚动和颜色流光同时保留 */
+#hallPage #content-profile .avatar-area .player-name.name-scroll {
+  animation:nameRainbow 4.8s linear infinite, nameScroll 7s ease-in-out infinite alternate;
+}
+#hallPage #content-profile .avatar-area .player-name::after {
+  content:""; display:block; width:clamp(24px, 8vw, 46px); height:2px; margin-top:.7vw; border-radius:99px;
+  background:linear-gradient(90deg, rgba(255,226,122,.98), rgba(126,232,255,.72), transparent);
+  box-shadow:0 0 10px rgba(255,215,0,.32), 0 0 16px rgba(126,232,255,.16);
+}
+@keyframes nameRainbow {
+  0% { background-position:0% 50%; }
+  100% { background-position:300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #hallPage #content-profile .avatar-area .player-name { animation:none !important; background-position:20% 50%; }
+}
+#hallPage #content-profile .avatar-area .profile-actions #signBtn {
+  background:linear-gradient(135deg,#fff0a8,#ffd75a 42%,#c99a1e) !important;
+  color:#2a1a00 !important;
+  border-color:rgba(255,255,255,.62) !important;
+  box-shadow:0 0 18px rgba(255,215,0,.32), inset 0 1px 0 rgba(255,255,255,.62) !important;
+}
+#hallPage #content-profile .avatar-area .dice-btn-avatar {
+  background:rgba(8,13,20,.62) !important;
+  border-color:rgba(90,220,255,.26) !important;
+  color:#d9eaff !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 12px rgba(70,210,255,.08) !important;
+}
+#hallPage #content-profile .avatar-area .player-id-row {
+  background:rgba(4,8,14,.56) !important;
+  border-color:rgba(90,220,255,.16) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+#hallPage #content-profile .avatar-area #playerTitlesRow > * {
+  border-radius:5px !important;
+  box-shadow:0 0 10px rgba(255,215,0,.10), inset 0 1px 0 rgba(255,255,255,.05);
+}
+@keyframes nameCardEdge { 0% { background-position:180% 0; } 100% { background-position:-180% 0; } }
+@keyframes nameCardBreath { 0%,100% { opacity:.58; } 50% { opacity:1; } }
+@media (prefers-reduced-motion: reduce) {
+  #hallPage #content-profile .avatar-area::before { animation:none !important; opacity:.8; }
+}
 
 
 /* ══════════════════════════════════════════════
@@ -3486,7 +3744,7 @@ div:has(> #annSearchInput) {
 .dock-btn img { position:relative; z-index:2; }
 @media (prefers-reduced-motion: reduce) { .dock-btn::after { animation:none !important; opacity:.45; } }
 .dock-btn:disabled, .dock-btn[disabled] {
-  opacity:.34; cursor:not-allowed;
+  opacity:.34; cursor:not-allowed; pointer-events:none;
   box-shadow:0 2px 8px rgba(0,0,0,.5);
 }
 /* 关闭键：红调区分 */
@@ -4882,6 +5140,11 @@ async function verify() {
 
   if (!id) { showLoginHint('请输入玩家ID'); return; }
 
+  if (!/^[A-Za-z0-9]{1,5}$/.test(id)) {
+    showLoginHint('登录账号只能是 1~5 位英文或数字');
+    return;
+  }
+
   _loginBusy = true;
   showLoginHint('');
   let res;
@@ -4964,6 +5227,7 @@ function forceBackToLogin(msg) {
   const hall = $('hallPage'); if (hall) hall.style.display = 'none';
   try { if (typeof stopHallFx === 'function') stopHallFx(); } catch (e) { }
   const start = $('startPage'); if (start) start.style.display = 'flex';
+  try { if (typeof tryMusic === 'function') tryMusic(); } catch (e) { }
   try { toast(msg || '登录已过期，请重新登录', 'err', 3000); } catch (e) {}
 }
 
@@ -5658,6 +5922,7 @@ async function logout() {
   window._friendIds = null;
   _friendIdsPromise = null;
   _titlesUid = ''; _titlesAt = 0; _titlesBusy = false;
+  try { if (typeof tryMusic === 'function') tryMusic(); } catch (e) { }
 
   $("pid").value = "";
 
@@ -5712,6 +5977,13 @@ function fitPlayerName() {
     el.classList.add("name-scroll");
   }
 }
+// 只影响显示：清理姓名外层残留的尖括号（如 <小棉花> → 小棉花），不改数据库
+function _prettyPlayerName(name) {
+  const raw = String(name == null ? '' : name).trim();
+  const m = raw.match(/^<\s*([^<>]{1,24})\s*>$/);
+  return m ? m[1] : (raw || '--');
+}
+
 async function renderPlayer() {
 
   // 纯渲染：直接用 curPlayer，不再调 /api/login（避免心跳/轮询时反复触发"上线了"公告刷屏）
@@ -5720,7 +5992,7 @@ async function renderPlayer() {
 
   if (!p) return;
 
-  $("playerName").textContent = p.name || '--';
+  $("playerName").textContent = _prettyPlayerName(p.name);
 
   const idEl = $("playerId");
   if (idEl) {
@@ -6659,6 +6931,35 @@ async function loadFriendIds() {
 
 
 
+function _playerIsAtPlace(place) {
+  if (!curPlayer || !place) return false;
+  const pid = String(curPlayer.place_id == null ? '' : curPlayer.place_id).trim();
+  const targetId = String(place.id == null ? '' : place.id).trim();
+  // place_id 和当前格子都可能是权威值，任意一个匹配就算“人在这个区域”
+  if (pid && targetId && pid === targetId) return true;
+  const myCell = String(curPlayer.current_cell == null ? '' : curPlayer.current_cell).trim().toUpperCase();
+  if (!myCell) return false;
+  const raw = Array.isArray(place.cell) ? place.cell : String(place.cell || '').split(',');
+  return raw.some(function (c) {
+    return String(c || '').trim().toUpperCase() === myCell;
+  });
+}
+
+function _mapPlaceInfoHtml(place) {
+  let html = '<div class="place-info">';
+  if (place.image) {
+    html += '<div class="place-image"><img src="' + escapeHtml(place.image) + '"></div>';
+  } else {
+    html += '<div class="place-image placeholder"><span>暂无地图图片</span></div>';
+  }
+  html += '<div class="place-title-row"><span class="place-title-deco"></span>'
+    + '<span class="place-name">' + escapeHtml(place.name) + '</span>'
+    + '<span class="place-title-deco"></span></div>';
+  if (place.content) html += '<div class="place-content"><div class="pc-inner">' + place.content + '</div></div>';
+  html += '</div>';
+  return html;
+}
+
 function showPlaceInfo(place) {
   if (typeof place === 'string') place = PLACES.find(p => p.id === place);
   if (!place) return toast('找不到地图数据', 'err');
@@ -6670,16 +6971,18 @@ function showPlaceInfo(place) {
     if (info) { info.style.display = "none"; info.innerHTML = ""; }
     return;
   }
-  if (info) { info.style.display = "none"; info.innerHTML = ""; }
   if (!dock) return;
-  const isHere = curPlayer && curPlayer.place_id != null
-    && String(curPlayer.place_id).trim() === String(place.id).trim();
+  const isHere = _playerIsAtPlace(place);
+  // 三个按钮：前往 / 闲逛 / 关闭；没到达的区域，闲逛保持浅色不可点
   dock.innerHTML =
       '<button class="dock-btn" title="立即前往" onclick="mapDockGo()"><img src="icon_go.png" alt=""></button>'
-    + '<button class="dock-btn" title="闲逛一下" onclick="mapDockFun()" ' + (isHere ? "" : "disabled") + '><img src="icon_fun.png" alt=""></button>'
-    + '<button class="dock-btn" title="查看简介" onclick="mapDockInfo()"><img src="icon_look.png" alt=""></button>'
+    + '<button class="dock-btn" title="' + (isHere ? '闲逛一下' : '需先到达该区域') + '" onclick="mapDockFun()" ' + (isHere ? '' : 'disabled') + '><img src="icon_fun.png" alt=""></button>'
     + '<button class="dock-btn dock-x" title="关闭" onclick="mapDockClose()"><img src="icon_x.png" alt=""></button>';
   dock.style.display = "flex";
+  if (info) {
+    info.innerHTML = _mapPlaceInfoHtml(place);
+    info.style.display = "block";
+  }
   if (window._dockTimer) clearTimeout(window._dockTimer);
   window._dockTimer = setTimeout(function () {
     const ip = $("placeInfo");
@@ -6695,7 +6998,12 @@ window.mapDockGo = async function () {
   window.mapDockClose();                 // 先收掉按钮组
   try { await doTravel(p, p.price || 0); } catch (e) { toast('前往失败：' + (e.message || e), 'err'); }
 };
-window.mapDockFun = function () { if (curViewPlace) entertainment(curViewPlace.id); };
+window.mapDockFun = function () {
+  const p = curViewPlace;
+  if (!p) return;
+  if (!_playerIsAtPlace(p)) return toast('需要先到达「' + (p.name || p.id) + '」才能闲逛', 'err');
+  entertainment(p.id);
+};
 window.mapDockClose = function () {
   const dock = $("mapDock"), info = $("placeInfo");
   const hadDetail = !!(info && info.style.display === 'block');
@@ -6706,33 +7014,9 @@ window.mapDockClose = function () {
     hallRevealContent('map');
   }
 };
-// 放大镜：展开/收起地区简介（再点一次收起）
+// 兼容旧调用：现在简介已经随地区点击直接显示，不再需要放大镜
 window.mapDockInfo = function () {
-  const place = curViewPlace;
-  const info = $("placeInfo");
-  if (!place || !info) return;
-  if (info.style.display === "block" && info.innerHTML) {
-    info.style.display = "none";
-    // 详情全屏时会隐藏地图面板；再点一次放大镜关闭详情后要把地图显回来
-    curTab = 'map';
-    hallRevealContent('map');
-    return;
-  }
-  let html = '<button class="place-back-btn" onclick="closePlaceInfoToMap()">← 返回地图</button>';
-  html += '<div class="place-info">';
-  if (place.image) {
-    html += '<div class="place-image"><img src="' + escapeHtml(place.image) + '"></div>';
-  } else {
-    html += '<div class="place-image placeholder"><span>暂无地图图片</span></div>';
-  }
-  html += '<div class="place-title-row"><span class="place-title-deco"></span>'
-    + '<span class="place-name">' + escapeHtml(place.name) + '</span>'
-    + '<span class="place-title-deco"></span></div>';
-  if (place.content) html += '<div class="place-content"><div class="pc-inner">' + place.content + '</div></div>';
-  html += '</div>';
-  info.innerHTML = html;
-  hideAllContentPanels();
-  info.style.display = "block";
+  if (curViewPlace) showPlaceInfo(curViewPlace);
 };
 
 
@@ -6780,11 +7064,9 @@ function closePlaceInfoToMap() {
 
 async function entertainment(placeId) {
 
-  const isHere = curPlayer && curPlayer.place_id != null
+  const _placeForCheck = PLACES.find(p => String(p.id) === String(placeId)) || { id: placeId, cell: '' };
 
-    && String(curPlayer.place_id).trim() === String(placeId).trim();
-
-  if (!isHere) {
+  if (!_playerIsAtPlace(_placeForCheck)) {
 
     return toast('请先加入此区域', 'err');
 
@@ -7665,6 +7947,8 @@ function stopHallBadgeWatch() {
   _hallBadgeChecking = false;
 }
 
+const HALL_SPIN_MIN_MS = 450;
+
 async function hallNav(tab, opts) {
   if (_hallNavBusy) return;
   opts = opts || {};
@@ -7686,7 +7970,7 @@ async function hallNav(tab, opts) {
   }
   if (useSpin) {
     const now = (window.performance && performance.now) ? performance.now() : Date.now();
-    const remain = 1000 - (now - started);
+    const remain = HALL_SPIN_MIN_MS - (now - started);
     if (remain > 0) await _hallSleep(remain);
     hallSpinStop(!!ok);
   } else {
@@ -7715,7 +7999,7 @@ async function hallRefresh() {
   try { const _r = await refreshAll(true); if (_r === false) ok = false; } catch (e) { console.error('[hallRefresh]', e); ok = false; }
   if (useSpin) {
     const now = (window.performance && performance.now) ? performance.now() : Date.now();
-    const remain = 1000 - (now - started);
+    const remain = HALL_SPIN_MIN_MS - (now - started);
     if (remain > 0) await _hallSleep(remain);
     hallSpinStop(ok);
     hallRevealContent(revealTab);
@@ -7731,15 +8015,13 @@ async function hallSpinThen(fn) {
   _hallNavBusy = true;
   const useSpin = !!_wheelSpinEnabled;
   const started = (window.performance && performance.now) ? performance.now() : Date.now();
-  if (useSpin) {
-    hallSpinStart();
-    await _hallSleep(1000);
-  }
+  if (useSpin) hallSpinStart();
   let ok = true;
+  // 设置/娱乐立即打开，不再先干等 1 秒；齿轮动画只作为背景反馈。
   try { await fn(); } catch (e) { console.error('[hallSpinThen]', e); ok = false; }
   if (useSpin) {
     const now = (window.performance && performance.now) ? performance.now() : Date.now();
-    const remain = 1000 - (now - started);
+    const remain = HALL_SPIN_MIN_MS - (now - started);
     if (remain > 0) await _hallSleep(remain);
     hallSpinStop(ok);
   } else {
@@ -10382,13 +10664,13 @@ async function showSkills() {
 
         const upQty = s.upgrade_cost_item_qty || 0;
 
-        return `<div class="profile-skill-row" style="background:rgba(255,255,255,.05);padding:2vw;border-radius:6px;${opacity}">
+        return `<div class="profile-skill-row skill-sect-row" style="background:rgba(255,255,255,.05);padding:2vw;border-radius:6px;${opacity}">
 
           <div style="display:flex;align-items:center;gap:2vw;">
 
             <div style="flex:1;min-width:0;">
 
-              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''}${sect.show_lv === false ? '' : ` <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${(!s.reachable) ? '需 Lv.' + (s.lv_required||0) : (s.unlocked ? ((parseInt(s.level) || 0) > 0 ? 'Lv.' + s.level : '未升级') : 'Lv.' + (s.lv_required||0) + '+')}</span>`}</div>
+              <div class="profile-skill-name" style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''}${sect.show_lv === false ? '' : ` <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${(!s.reachable) ? '需 Lv.' + (s.lv_required||0) : (s.unlocked ? ((parseInt(s.level) || 0) > 0 ? 'Lv.' + s.level : '未升级') : 'Lv.' + (s.lv_required||0) + '+')}</span>`}</div>
 
               ${(!s.unlocked) ? `<div style="font-size:2.4vw;color:rgba(255,255,255,.55);margin-top:.3vw;">${greyed ? '<span style="color:#888;">🔒 未达等级 ' + s.lv_required + '</span>' : '<span style="color:#ffd700;">⚡ 可学习</span>'}</div>` : ''}
 
@@ -10422,7 +10704,7 @@ async function showSkills() {
 
       const wrapCls = 'collapse-wrap' + (sect.collapsed ? ' collapsed' : '');
 
-      html += `<div class="${wrapCls}" data-ck="sect_${escapeHtml(sect.id || sect.name || '')}" style="margin-bottom:3vw;background:rgba(255,255,255,.04);border:1px solid rgba(255,215,0,.3);border-radius:8px;padding:2vw;">
+      html += `<div class="${wrapCls} skill-sect-box" data-ck="sect_${escapeHtml(sect.id || sect.name || '')}" style="margin-bottom:3vw;background:rgba(255,255,255,.04);border:1px solid rgba(255,215,0,.3);border-radius:8px;padding:2vw;">
 
         <div class="collapse-head" onclick="_skillCkToggle(this,'sect_${escapeHtml(sect.id || sect.name || '')}')" style="font-weight:bold;color:#ffd700;font-size:3.6vw;cursor:pointer;">
 
@@ -10495,13 +10777,13 @@ async function showSkills() {
 
         const gainQty = s.gain_qty || 1;
 
-        return `<div class="profile-skill-row" style="background:rgba(255,255,255,.05);padding:2vw;border-radius:6px;${opacity}">
+        return `<div class="profile-skill-row skill-sidejob-row" style="background:rgba(255,255,255,.05);padding:2vw;border-radius:6px;${opacity}">
 
           <div style="display:flex;align-items:center;gap:2vw;">
 
             <div style="flex:1;min-width:0;">
 
-              <div style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''} <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${lvTag}</span></div>
+              <div class="profile-skill-name" style="font-weight:bold;font-size:2.95vw;color:#dce9ff;text-shadow:0 0 10px rgba(205,225,255,.35),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#eef5ff,#aebed4);color:#26313f;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''} <span style="font-size:2.15vw;font-weight:600;color:rgba(220,235,255,.72);">${lvTag}</span></div>
 
               ${greyed ? `<div style="font-size:2.1vw;color:rgba(255,255,255,.42);margin-top:.4vw;">🔒 未达等级 ${s.lv_required}</div>` : ''}
 
@@ -10537,7 +10819,7 @@ async function showSkills() {
         ? ' <span style="display:inline-block;background:linear-gradient(180deg,#ffb74d,#e67e22);color:#3a2100;font-size:2.25vw;font-weight:800;padding:.25vw 1.2vw;border-radius:99px;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">临时</span>'
         : '';
 
-      html += `<div class="${wrapCls}" data-ck="sj_${escapeHtml(sj.id || sj.name || '')}" style="margin-bottom:3vw;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.3);border-radius:8px;padding:2vw;">
+      html += `<div class="${wrapCls} skill-sidejob-box" data-ck="sj_${escapeHtml(sj.id || sj.name || '')}" style="margin-bottom:3vw;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.3);border-radius:8px;padding:2vw;">
 
         <div class="collapse-head" onclick="_skillCkToggle(this,'sj_${escapeHtml(sj.id || sj.name || '')}')" style="font-weight:bold;color:${escapeHtml(sj.title_color || '#c084fc')};font-size:3.6vw;cursor:pointer;">
 
@@ -11302,71 +11584,107 @@ if (!window._chatWindows) window._chatWindows = {};
 
 
 
-async function openChatWindow(friendId, friendName) {
+const CHAT_EMOJIS = ['😀','😂','🥰','😎','🤔','😭','😡','👍','👎','🎉','❤️','🔥','💎','🎁','🐱','🌸','✨','💬','🤝','🍵','🌙','⭐','💫','🥳','😴','🤯','(≧▽≦)','(╯°□°）╯','(｡･ω･｡)','(￣▽￣)','( •̀ ω •́ )✧','(´•ω•`)'];
 
-  closeModal();
-
-
-  if (window._chatWindows[friendId]) {
-
-    const box = window._chatWindows[friendId];
-
-    box.style.display = 'flex';
-
-    $("chatInput-" + friendId)?.focus();
-
-    return;
-
-  }
-
-  const box = document.createElement('div');
-
-  box.id = 'chatBox-' + friendId;
-
-  box.className = 'chat-box';
-
-  box.dataset.friendId = friendId;
-
-  box.innerHTML = `
-
-    <div class="chat-head">
-
-      <span>💬 与 <b>${escapeHtml(friendName)}</b> 私聊</span>
-
-      <span class="chat-close" onclick="closeChatWindow('${friendId}')">×</span>
-
-    </div>
-
-    <div class="chat-msgs" id="chatMsgs-${friendId}"></div>
-
-    <div class="chat-input-row">
-
-      <input id="chatInput-${friendId}" maxlength="500" placeholder="说点什么...（最多 500 字）" onkeydown="if(event.key==='Enter'){sendChat('${friendId}');}">
-
-      <button onclick="sendChat('${friendId}')">发送</button>
-
-    </div>
-
-  `;
-
-  document.body.appendChild(box);
-
-  window._chatWindows[friendId] = box;
-
-  await loadChatHistory(friendId);
-
+function _chatOverlay() {
+  let ov = $('chatOverlay');
+  if (ov) return ov;
+  ov = document.createElement('div');
+  ov.id = 'chatOverlay';
+  ov.className = 'chat-overlay';
+  ov.addEventListener('click', function (e) {
+    if (e.target === ov) closeAllChats();
+  });
+  document.body.appendChild(ov);
+  return ov;
 }
 
+function closeAllChats() {
+  Object.keys(window._chatWindows || {}).forEach(function (fid) {
+    try { closeChatWindow(fid); } catch (e) { }
+  });
+}
 
+async function openChatWindow(friendId, friendName) {
+  closeModal();
+  const ov = _chatOverlay();
+
+  if (window._chatWindows[friendId]) {
+    const old = window._chatWindows[friendId];
+    old.style.display = 'flex';
+    ov.classList.add('show');
+    $('chatInput-' + friendId)?.focus();
+    return;
+  }
+
+  // 一次只保留一个私聊弹窗，避免多个窗口互相遮挡
+  Object.keys(window._chatWindows || {}).forEach(function (fid) {
+    if (String(fid) !== String(friendId)) {
+      try { closeChatWindow(fid); } catch (e) { }
+    }
+  });
+
+  const box = document.createElement('div');
+  box.id = 'chatBox-' + friendId;
+  box.className = 'chat-box';
+  box.dataset.friendId = friendId;
+
+  const emojiHtml = CHAT_EMOJIS.map(function (em) {
+    return '<button type="button" onclick="insertChatEmoji(\'' + friendId + '\',\'' + encodeURIComponent(em) + '\')">' + escapeHtml(em) + '</button>';
+  }).join('');
+
+  box.innerHTML = `
+    <div class="chat-head">
+      <div class="chat-peer">
+        <div class="chat-avatar">${escapeHtml((friendName || '?').charAt(0))}</div>
+        <div style="min-width:0;">
+          <div class="chat-peer-name">${escapeHtml(friendName || friendId)}</div>
+          <div class="chat-peer-status"><span style="display:inline-block;width:1.5vw;height:1.5vw;min-width:6px;min-height:6px;border-radius:50%;background:#2ee84e;box-shadow:0 0 8px rgba(46,232,78,.8);margin-right:.6vw;vertical-align:middle;"></span>在线私聊</div>
+        </div>
+      </div>
+      <button class="chat-close" onclick="closeChatWindow('${friendId}')" aria-label="关闭">×</button>
+    </div>
+    <div class="chat-msgs" id="chatMsgs-${friendId}"></div>
+    <div class="chat-compose">
+      <div class="chat-emoji-panel" id="chatEmoji-${friendId}">${emojiHtml}</div>
+      <div class="chat-input-row">
+        <button type="button" class="chat-emoji-btn" onclick="toggleChatEmoji('${friendId}')" title="表情">😊</button>
+        <input id="chatInput-${friendId}" maxlength="500" placeholder="输入消息…" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat('${friendId}');}">
+        <button type="button" class="chat-send" onclick="sendChat('${friendId}')">发送</button>
+      </div>
+    </div>
+  `;
+
+  ov.appendChild(box);
+  ov.classList.add('show');
+  window._chatWindows[friendId] = box;
+  await loadChatHistory(friendId);
+  setTimeout(function () { $('chatInput-' + friendId)?.focus(); }, 80);
+}
+
+function toggleChatEmoji(friendId) {
+  const panel = $('chatEmoji-' + friendId);
+  if (!panel) return;
+  panel.classList.toggle('show');
+}
+
+function insertChatEmoji(friendId, emojiEnc) {
+  let emoji = '';
+  try { emoji = decodeURIComponent(emojiEnc || ''); } catch (e) { emoji = ''; }
+  const input = $('chatInput-' + friendId);
+  if (!input || !emoji) return;
+  input.value = String(input.value || '') + emoji;
+  input.focus();
+  const panel = $('chatEmoji-' + friendId);
+  if (panel) panel.classList.remove('show');
+}
 
 function closeChatWindow(friendId) {
-
   const box = window._chatWindows[friendId];
-
   if (box) box.remove();
-
   delete window._chatWindows[friendId];
-
+  const ov = $('chatOverlay');
+  if (ov && !Object.keys(window._chatWindows || {}).length) ov.classList.remove('show');
 }
 
 
@@ -13075,22 +13393,39 @@ async function loadGameConfig() {
 
 // ★ 启动页 / 大厅 各用一首背景音乐（文件名可自己替换）：启动页 bgm_start.mp3，大厅 bgm.mp3
 //   没放 bgm_start.mp3 也没关系，播放失败会自动退回 bgm.mp3
+// 以 bgm.paused 的实际状态为准，不再只信 playing 变量。
+// 五子棋/浏览器自动暂停后，playing 可能是旧值 true，原逻辑会永远不再恢复。
+let _musicStarting = false;
 function tryMusic(){
   const _start = !curId;                       // 还没登录 = 在启动页
   const _adminEn = _start ? (GAME_CONFIG.start_bgm_enabled !== false) : (GAME_CONFIG.bgm_enabled !== false);
   const _en = _start ? _adminEn : ((_localBgmOn === true) ? true : _adminEn);
-  if(!_en || !musicOn || playing) return;
+  if(!_en || !musicOn) return;
   if(window._gmkAnyLayerOpen && window._gmkAnyLayerOpen()) return;
   const _src = _start ? 'bgm_start.mp3' : 'bgm.mp3';
+  // 已经在放同一首才直接返回；启动页→大厅必须允许切歌
+  if(bgm && !bgm.paused && !bgm.ended){
+    if(bgm.getAttribute('src') === _src){ playing = true; return; }
+  }
+  if(_musicStarting) return;
   try {
     if (bgm.getAttribute('src') !== _src) { bgm.pause(); bgm.setAttribute('src', _src); bgm.load(); }
   } catch(e) {}
-  bgm.play().then(()=>playing=true).catch(()=>{
+  _musicStarting = true;
+  bgm.play().then(()=>{ playing=true; }).catch(()=>{
     if (_src !== 'bgm.mp3') {
-      try { bgm.setAttribute('src','bgm.mp3'); bgm.load(); bgm.play().then(()=>playing=true).catch(()=>{}); } catch(e) {}
+      try {
+        bgm.setAttribute('src','bgm.mp3'); bgm.load();
+        return bgm.play().then(()=>{ playing=true; }).catch(()=>{ playing=false; });
+      } catch(e) { playing=false; }
     }
-  });
+  }).finally(()=>{ _musicStarting = false; });
 }
+
+// 真实播放状态一变化就同步，避免 paused 后 playing 还停在 true
+bgm.addEventListener('play', function(){ playing = true; });
+bgm.addEventListener('pause', function(){ playing = false; });
+bgm.addEventListener('ended', function(){ playing = false; });
 
 document.addEventListener("touchstart", tryMusic);
 
@@ -14608,7 +14943,7 @@ loadGameConfig();
             if (!bgm.paused) { _hallBgmWasPlaying = true; bgm.pause(); }
           } else if (_hallBgmWasPlaying) {
             _hallBgmWasPlaying = false;
-            try { bgm.play(); } catch (e) { }
+            try { if (typeof tryMusic === 'function') tryMusic(); } catch (e) { }
           }
         }
       } catch (e) { }
@@ -16055,6 +16390,65 @@ window.gmkDoUseCard = function (cardId, target, targets) {
     if (document.hidden) stop();
     else if (curId && host.style.display !== 'none') start();
   });
+})();
+
+/* ===== 轮盘解压彩蛋：旋转中滑动再转一圈，纯本地无跳转 ===== */
+(function initWheelSwipeFun() {
+  const hero = document.getElementById('hallHero');
+  if (!hero) return;
+  let swipe = null, blockClick = false, blockTimer = 0, funTimer = 0;
+
+  function spinningNow(target) {
+    if (!_wheelSpinEnabled) return false;
+    // 轮盘本来就在持续旋转；按在轮盘按钮上滑动即可触发，不必等导航旋转
+    if (hero.classList.contains('spinning') ||
+        hero.classList.contains('fun-spin') ||
+        (typeof _hallNavBusy !== 'undefined' && _hallNavBusy)) return true;
+    return !!(target && target.closest && target.closest('.hero-btn'));
+  }
+
+  function localSpin() {
+    if (!_wheelSpinEnabled) return;
+    hero.classList.remove('fun-spin');
+    void hero.offsetWidth;                 // 强制重启动画
+    hero.classList.add('fun-spin');
+    try { _playHallSpinAudio('start'); } catch (e) { }
+    clearTimeout(funTimer);
+    funTimer = setTimeout(function () {
+      hero.classList.remove('fun-spin');
+      try { _playHallSpinAudio('done'); } catch (e) { }
+    }, 650);
+  }
+
+  hero.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (!spinningNow(e.target)) { swipe = null; return; }
+    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, fired: false };
+  }, { passive: true });
+
+  hero.addEventListener('pointermove', function (e) {
+    if (!swipe || e.pointerId !== swipe.id || swipe.fired) return;
+    if (!_wheelSpinEnabled) { swipe = null; return; }
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    if (Math.hypot(dx, dy) < 18) return;
+    swipe.fired = true;
+    blockClick = true;
+    clearTimeout(blockTimer);
+    blockTimer = setTimeout(function () { blockClick = false; }, 500);
+    try { e.preventDefault(); } catch (err) { }
+    localSpin();
+  }, { passive: false });
+
+  function endSwipe() { swipe = null; }
+  hero.addEventListener('pointerup', endSwipe, { passive: true });
+  hero.addEventListener('pointercancel', endSwipe, { passive: true });
+  hero.addEventListener('click', function (e) {
+    if (blockClick) {
+      blockClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 })();
 
 </script>

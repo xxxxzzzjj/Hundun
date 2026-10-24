@@ -87,7 +87,14 @@ body { background:url('hall_bg.png') center/cover no-repeat; }
 .collapse-wrap.collapsed .collapse-body { display:none; }
 .card-title { color:#ff4d5a; font-size:4.6vw; font-weight:bold;
   border-left:5px solid #ff4d5a; padding-left:2.5vw; margin-bottom:3.5vw;
-  display:flex; align-items:center; justify-content:space-between; }
+  display:flex; align-items:center; justify-content:flex-start !important;
+  flex-wrap:wrap; gap:1.2vw; }
+/* 所有卡片操作按钮统一放第二排、靠最左，不再被推到右边 */
+.card-title > .ops, .ops {
+  display:flex; align-items:center; justify-content:flex-start;
+  flex-wrap:wrap; gap:1.2vw;
+}
+.card-title > .ops { flex:0 0 100%; width:100%; }
 /* 操作按钮：真正缩短左右宽度 —— 不再强制最小宽度，让按钮紧贴文字 */
 .row-op { display:inline-block; padding:.55vw .9vw; font-size:2.6vw; margin:.2vw;
   border:none; border-radius:6px; cursor:pointer; font-weight:bold; white-space:nowrap;
@@ -96,6 +103,19 @@ body { background:url('hall_bg.png') center/cover no-repeat; }
 td.op-cell, th.op-cell { width:1%; white-space:nowrap; }
 .op-wrap { display:flex; flex-wrap:wrap; gap:.4vw; max-width:min(26vw, 160px); min-width:0; }
 td.op-cell { padding:1vw .8vw; }
+/* 操作按钮统一放到每行下面的单独一行，按钮横排，避免左侧一列把行高撑高 */
+tr.op-row > td.op-row-cell {
+  padding:1.1vw .8vw !important;
+  border-bottom:1px solid rgba(255,255,255,.08) !important;
+  background:rgba(0,0,0,.12) !important;
+  text-align:left !important;
+}
+tr.op-row .op-wrap {
+  display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
+  align-items:center !important; justify-content:flex-start !important;
+  gap:.5vw !important; max-width:none !important;
+}
+tr.op-row .row-op { margin:0 !important; }
 .mini-op { padding:.8vw 1.3vw; font-size:2.7vw; min-width:0; text-align:center;
   border:none; border-radius:8px; background:rgba(255,255,255,.1); color:#fff;
   cursor:pointer; white-space:nowrap; }
@@ -109,6 +129,11 @@ th { background:rgba(255,77,90,.15); color:#ff4d5a; padding:1.8vw;
 td { padding:1.8vw; border-bottom:1px solid rgba(255,255,255,.08); color:#fff;
   word-break:break-word; vertical-align:top; }
 tr:last-child td { border-bottom:none; }
+/* ID 是短英文/数字：绝不允许拆成一列竖排。留够 5 个英文字符宽度 */
+.id-tag { white-space:nowrap !important; word-break:keep-all !important; overflow-wrap:normal !important; }
+td .id-tag { display:inline-block; min-width:5.5ch; }
+/* 帖子/公告标题列留足宽度，避免一个汉字一行 */
+.post-title-cell { min-width:18ch; max-width:34ch; word-break:normal !important; overflow-wrap:anywhere; line-height:1.5; }
 .gold { color:#ffd700; font-weight:bold; }
 .muted { color:rgba(255,255,255,.5); font-size:3vw; }
 .id-tag { color:#0ff; font-family:monospace; }
@@ -117,8 +142,12 @@ tr:last-child td { border-bottom:none; }
 .row-op.edit { background:#3b82f6; color:#fff; }
 .row-op.del  { background:rgba(255,255,255,.15); color:#fff; }
 
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:2vw; margin-bottom:2vw; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:2vw; margin-bottom:2vw; align-items:start; }
 .form-row.full { grid-template-columns:1fr; }
+.form-row.three { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+@media (max-width:560px) {
+  .form-row.three { grid-template-columns:1fr 1fr; }
+}
 label { display:block; font-size:3.4vw; color:rgba(255,255,255,.7); margin-bottom:1vw; font-weight:bold; }
 input, select, textarea { width:100%; background:rgba(255,255,255,.92); border:none; outline:none;
   border-radius:8px; padding:2.5vw 3vw; font-size:3.6vw; color:#222; }
@@ -175,6 +204,50 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
   font-size: clamp(12px, 3.3vw, 15px);
 }
 
+/* 后台顶部：固定两排，每排 6 个，低高度 + 彩色分类 */
+.tabs {
+  display:grid !important;
+  grid-template-columns:repeat(6, minmax(0, 1fr)) !important;
+  gap:1vw !important;
+  overflow:visible !important;
+  flex-wrap:nowrap !important;
+  padding:2vw !important;
+  margin:2vw 0 !important;
+  scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab {
+  flex:none !important;
+  min-width:0 !important;
+  padding:1.5vw .3vw !important;
+  font-size:clamp(10px, 2.7vw, 14px) !important;
+  border-radius:9px !important;
+  border:1px solid var(--tab-border, rgba(255,255,255,.18));
+  background:var(--tab-bg, rgba(255,255,255,.07));
+  color:rgba(255,255,255,.85) !important;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:background .18s, box-shadow .18s, transform .12s;
+}
+.tab:active { transform:scale(.97); }
+.tab.active {
+  background:var(--tab-active, linear-gradient(180deg,#ef2b3a,#b8121f)) !important;
+  border-color:rgba(255,255,255,.45) !important;
+  color:#fff !important;
+  box-shadow:0 0 14px var(--tab-glow, rgba(255,77,90,.35)) !important;
+}
+.tab[data-tab="players"]  { --tab-bg:rgba(255,77,90,.16);  --tab-border:rgba(255,77,90,.5);  --tab-glow:rgba(255,77,90,.4);  --tab-active:linear-gradient(180deg,#ef2b3a,#9f1220); }
+.tab[data-tab="places"]   { --tab-bg:rgba(46,232,120,.13); --tab-border:rgba(46,232,120,.45); --tab-glow:rgba(46,232,120,.35); --tab-active:linear-gradient(180deg,#26b85c,#126b33); }
+.tab[data-tab="items"]    { --tab-bg:rgba(77,140,255,.15); --tab-border:rgba(77,140,255,.48); --tab-glow:rgba(77,140,255,.38); --tab-active:linear-gradient(180deg,#4d8cff,#234fae); }
+.tab[data-tab="sect"]     { --tab-bg:rgba(255,215,0,.14);  --tab-border:rgba(255,215,0,.48);  --tab-glow:rgba(255,215,0,.32);  --tab-active:linear-gradient(180deg,#d9b300,#806900); }
+.tab[data-tab="sidejob"]  { --tab-bg:rgba(192,132,252,.15);--tab-border:rgba(192,132,252,.48);--tab-glow:rgba(192,132,252,.35);--tab-active:linear-gradient(180deg,#a855f7,#6023a0); }
+.tab[data-tab="announce"] { --tab-bg:rgba(255,140,0,.14);  --tab-border:rgba(255,140,0,.45);  --tab-glow:rgba(255,140,0,.32);  --tab-active:linear-gradient(180deg,#d97706,#8a4500); }
+.tab[data-tab="posts"]    { --tab-bg:rgba(34,211,238,.13); --tab-border:rgba(34,211,238,.42); --tab-glow:rgba(34,211,238,.3);  --tab-active:linear-gradient(180deg,#0891b2,#07556a); }
+.tab[data-tab="treasure"] { --tab-bg:rgba(250,204,21,.13); --tab-border:rgba(250,204,21,.42); --tab-glow:rgba(250,204,21,.3);  --tab-active:linear-gradient(180deg,#ca8a04,#6f4b00); }
+.tab[data-tab="config"]   { --tab-bg:rgba(148,163,184,.14);--tab-border:rgba(148,163,184,.4); --tab-glow:rgba(148,163,184,.3); --tab-active:linear-gradient(180deg,#64748b,#334155); }
+.tab[data-tab="gomoku"]   { --tab-bg:rgba(244,114,182,.14);--tab-border:rgba(244,114,182,.42);--tab-glow:rgba(244,114,182,.3); --tab-active:linear-gradient(180deg,#db2777,#7a123f); }
+.tab[data-tab="merchant"] { --tab-bg:rgba(251,146,60,.14); --tab-border:rgba(251,146,60,.44); --tab-glow:rgba(251,146,60,.32); --tab-active:linear-gradient(180deg,#c2410c,#6b2105); }
+.tab[data-tab="backup"]   { --tab-bg:rgba(34,197,94,.14);  --tab-border:rgba(34,197,94,.44);  --tab-glow:rgba(34,197,94,.32);  --tab-active:linear-gradient(180deg,#15803d,#0a4a24); }
+
 @media (max-width: 900px) {
   /* 3) 表格操作列：会被 JS 搬到每行最前面，这里让它横向滑动时固定在左边，
         这样滑到后面看数据时，按钮也一直可见 */
@@ -185,9 +258,9 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
     background: #221e2a;
     box-shadow: 8px 0 12px rgba(0,0,0,.6);
   }
-  /* 操作列里的按钮竖着排，避免横排撑宽 */
-  td.op-cell .op-wrap { flex-direction: column; align-items: stretch; }
-  td.op-cell .row-op { margin: .4vw 0; }
+  /* 操作按钮不再挤在左侧竖排：JS 会把它移到每行下面单独一行 */
+  td.op-cell .op-wrap { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  td.op-cell .row-op { margin: .2vw; }
 
   /* 4) 宽表格里的输入框别把列撑爆 */
   td input, td select { min-width: 0; }
@@ -224,6 +297,35 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
 .toast.show { opacity:1; }
 .toast.err { border-color:#e62836; }
 .toast.ok  { border-color:#2ee84e; }
+
+/* 后台日志：从左侧滑出，点右侧空白关闭（和大厅提示栏一致） */
+.admin-log-overlay {
+  position:fixed; inset:0; z-index:180; display:none;
+  background:rgba(3,4,9,.58); -webkit-backdrop-filter:blur(5px); backdrop-filter:blur(5px);
+}
+.admin-log-overlay.show { display:block; }
+.admin-log-drawer {
+  position:absolute; top:0; left:0; width:min(92vw, 560px); height:100%;
+  display:flex; flex-direction:column;
+  background:linear-gradient(170deg, rgba(28,25,38,.985), rgba(9,10,17,.995));
+  border-right:1px solid rgba(255,215,0,.24);
+  box-shadow:20px 0 60px rgba(0,0,0,.6);
+  transform:translate3d(-102%,0,0); will-change:transform;
+  transition:transform .32s cubic-bezier(.22,1,.36,1);
+}
+.admin-log-overlay.show .admin-log-drawer { transform:translate3d(0,0,0); }
+.admin-log-head {
+  flex-shrink:0; padding:5vw 4vw 3vw;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.admin-log-title { font-size:4.4vw; font-weight:900; color:#ffd76a; letter-spacing:.06em; }
+.admin-log-sub { margin-top:.8vw; font-size:2.5vw; color:rgba(255,255,255,.4); line-height:1.5; }
+.admin-log-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:3vw 4vw 6vw; }
+.admin-log-section { margin-bottom:4vw; }
+.admin-log-section h4 { margin:0 0 1.8vw; font-size:3vw; color:#ff8d98; font-weight:800; }
+.admin-log-section table { font-size:2.5vw; }
+.admin-log-section th, .admin-log-section td { padding:1.2vw 1vw; }
+
 
 .footer-mark { text-align:center; color:rgba(255,255,255,.3);
   letter-spacing:.35em; font-size:3.4vw; padding:3vh 0 2vh; font-weight:bold; }
@@ -370,7 +472,6 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
     <div class="tab" data-tab="config" onclick="switchTab('config')">数据</div>
     <div class="tab" data-tab="gomoku" onclick="switchTab('gomoku')">五子棋</div>
     <div class="tab" data-tab="merchant" onclick="switchTab('merchant')">🏪 商人</div>
-    <div class="tab" data-tab="logs" onclick="switchTab('logs')">日志</div>
     <div class="tab" data-tab="backup" onclick="openBackupTab()">💾 备份</div>
   </div>
 
@@ -403,6 +504,7 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
           <button class="mini-op" onclick="openPlayerCapPanel()" style="margin-left:2vw;">📊 上限值设置</button>
           <button class="mini-op" onclick="openTitleManager()" style="margin-left:2vw;">📛 编辑称号</button>
           <button class="mini-op red" onclick="showRecycleBin()" style="margin-left:2vw;">🗑️ 回收站</button>
+          <button class="mini-op" onclick="openAdminLogDrawer()" style="margin-left:2vw;background:rgba(255,215,0,.13);border:1px solid rgba(255,215,0,.45);">📋 日志</button>
         </div>
       </div>
       <div id="playerList"><div class="empty">加载中…</div></div>
@@ -988,44 +1090,50 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
       <div class="form-row">
         <div><label>是否开启宝箱</label><select id="cfg_chest_enabled"><option value="1">开启</option><option value="0">关闭</option></select></div>
         <div><label>每几小时刷新一次</label><input id="cfg_chest_interval_hours" type="number" min="1" max="720" value="3"></div>
-  <div class="form-row">
-    <div><label>捡到后消失方式</label>
-      <select id="cfg_chest_vanish_mode" onchange="gmkVanishUI()">
-        <option value="instant">捡到后立即消失</option>
-        <option value="delay">捡到后 N 分钟消失</option>
-        <option value="count">被捡 N 次后消失</option>
-      </select>
-    </div>
-    <div id="row_chest_vanish_minutes"><label>捡到后几分钟消失</label><input id="cfg_chest_vanish_minutes" type="number" min="1" max="1440" value="5"></div>
-    <div id="row_chest_vanish_count"><label>被捡几次后消失</label><input id="cfg_chest_vanish_count" type="number" min="1" max="99" value="1"></div>
-  <div class="form-row">
-    <div><label>💾 自动备份（懒备份）</label>
-      <select id="cfg_backup_auto_enabled">
-        <option value="1">开启（推荐）</option>
-        <option value="0">关闭</option>
-      </select>
-    </div>
-    <div><label>每个玩家几小时自动备份一次</label><input id="cfg_backup_auto_interval_hours" type="number" min="1" max="720" value="24"></div>
-    <div><label>自动备份每人保留几份</label><input id="cfg_backup_auto_keep" type="number" min="1" max="20" value="3"></div>
-  </div>
-  <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;line-height:1.6;">
-    · 玩家<b style="color:#8effa8;">心跳时</b>顺便检查：距上次自动备份超过设定小时数，就静默备份一份（约 0.2 秒/人）<br>
-    · <b style="color:#ffd700;">压力分摊到一整天</b>，不会集中处理全服，不影响流畅度<br>
-    · 备份内容：属性/玄币/健康 + 背包 + 称号 + 副业 + 打工 + 种田 + 技能 + 门派绑定<br>
-    · 手动备份（玩家列表「💾 备份」按钮）<b style="color:#8effa8;">不受份数限制</b>，永久保留
-  </div>
-  </div>
-  <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;">
-    · <b style="color:#ffd700;">立即消失</b>：第一个到达的玩家拿走，地图上马上消失<br>
-    · <b style="color:#ffd700;">N 分钟消失</b>：被拿走后地图上仍显示（可做变暗），N 分钟后消失，期间别人不能再拿<br>
-    · <b style="color:#ffd700;">N 次消失</b>：可被 N 个不同玩家各拿一次（同一人只能拿一次），拿满 N 次后消失
-  </div>
       </div>
+
+      <div class="form-row">
+        <div><label>捡到后消失方式</label>
+          <select id="cfg_chest_vanish_mode" onchange="gmkVanishUI()">
+            <option value="instant">捡到后立即消失</option>
+            <option value="delay">捡到后 N 分钟消失</option>
+            <option value="count">被捡 N 次后消失</option>
+          </select>
+        </div>
+        <div id="row_chest_vanish_minutes"><label>捡到后几分钟消失</label><input id="cfg_chest_vanish_minutes" type="number" min="1" max="1440" value="5"></div>
+        <div id="row_chest_vanish_count"><label>被捡几次后消失</label><input id="cfg_chest_vanish_count" type="number" min="1" max="99" value="1"></div>
+      </div>
+      <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;line-height:1.6;">
+        · <b style="color:#ffd700;">立即消失</b>：第一个到达的玩家拿走，地图上马上消失<br>
+        · <b style="color:#ffd700;">N 分钟消失</b>：被拿走后地图上仍显示（可做变暗），N 分钟后消失，期间别人不能再拿<br>
+        · <b style="color:#ffd700;">N 次消失</b>：可被 N 个不同玩家各拿一次（同一人只能拿一次），拿满 N 次后消失
+      </div>
+
+      <div class="form-row">
+        <div><label>💾 自动备份（懒备份）</label>
+          <select id="cfg_backup_auto_enabled">
+            <option value="1">开启（推荐）</option>
+            <option value="0">关闭</option>
+          </select>
+        </div>
+        <div><label>自动备份间隔（小时）</label><input id="cfg_backup_auto_interval_hours" type="number" min="1" max="720" value="24"></div>
+      </div>
+      <div class="form-row">
+        <div><label>自动备份保留份数（最多 2）</label><input id="cfg_backup_auto_keep" type="number" min="1" max="2" value="2"></div>
+        <div></div>
+      </div>
+      <div style="font-size:2.5vw;color:rgba(255,255,255,.45);margin:-1vw 0 2vw;line-height:1.6;">
+        · 玩家<b style="color:#8effa8;">心跳时</b>顺便检查：距上次自动备份超过设定小时数，就静默备份一份（约 0.2 秒/人）<br>
+        · <b style="color:#ffd700;">压力分摊到一整天</b>，不会集中处理全服，不影响流畅度<br>
+        · 备份内容：属性/玄币/健康 + 背包 + 称号 + 副业 + 打工 + 种田 + 技能 + 门派绑定<br>
+        · 每个玩家最多保留最近 <b style="color:#ffd700;">2 份</b>备份（自动 / 手动都会按此上限清理）
+      </div>
+
       <div class="form-row">
         <div><label>每次刷新几个</label><input id="cfg_chest_spawn_count" type="number" min="1" max="50" value="3"></div>
-        <div><label>没被捡走几小时后消失</label><input id="cfg_chest_expire_hours" type="number" min="1" max="720" value="12"></div>
+        <div><label>未捡走几小时后消失</label><input id="cfg_chest_expire_hours" type="number" min="1" max="720" value="12"></div>
       </div>
-      <div class="form-row">
+      <div class="form-row three">
         <div><label>🟤 普通宝箱 概率</label><input id="cfg_chest_prob_normal" type="number" min="0" max="100" value="70"></div>
         <div><label>🔵 稀有宝箱 概率</label><input id="cfg_chest_prob_rare" type="number" min="0" max="100" value="25"></div>
         <div><label>🟡 极品宝箱 概率</label><input id="cfg_chest_prob_epic" type="number" min="0" max="100" value="5"></div>
@@ -1145,6 +1253,29 @@ input:focus, textarea:focus { box-shadow:0 0 0 2px #ff4d5a; }
   </div>
 
   <div class="footer-mark">HUNDUNJIYUAN · GM CONSOLE</div>
+</div>
+
+<div class="admin-log-overlay" id="adminLogOverlay" onclick="if(event.target===this)closeAdminLogDrawer()">
+  <div class="admin-log-drawer">
+    <div class="admin-log-head">
+      <div class="admin-log-title">📋 日志</div>
+      <div class="admin-log-sub">系统提示 / 玩家操作 / 寻宝记录 · 点击右侧空白区域关闭</div>
+    </div>
+    <div class="admin-log-body">
+      <div class="admin-log-section">
+        <h4>📢 玩家系统提示</h4>
+        <div id="drawerSysTipLogList"><div class="empty">加载中…</div></div>
+      </div>
+      <div class="admin-log-section">
+        <h4>🧾 玩家操作日志</h4>
+        <div id="drawerLogList"><div class="empty">加载中…</div></div>
+      </div>
+      <div class="admin-log-section">
+        <h4>🗺 寻宝日志</h4>
+        <div id="drawerTreasureLogList"><div class="empty">加载中…</div></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="modal-bg" id="modal">
@@ -1366,6 +1497,9 @@ function escapeHtml(s) {
 //       JS 绑定的点击事件都不会丢；表头 th 同步搬，保证列不会错位。
 // 覆盖范围：任何被插入到页面的 table 都会被自动处理（弹窗、tab 内容、动态刷新都算），
 //       靠 MutationObserver 兜住，不需要在每个渲染函数里单独调用。
+// 后台表格的操作按钮统一改成「每行下面单独一行」。
+// 不再把操作列搬到最左边，避免窄屏时左侧一列按钮把行高撑得特别高。
+// 直接移动 DOM，inline onclick 和后续绑定的事件都不会丢。
 function _opsToFront(root) {
   try {
     const scope = (root && root.querySelectorAll) ? root : document;
@@ -1373,22 +1507,35 @@ function _opsToFront(root) {
     if (scope.tagName === 'TABLE') tables.push(scope);
     if (scope.querySelectorAll) scope.querySelectorAll('table').forEach(function (t) { tables.push(t); });
     tables.forEach(function (tbl) {
-      if (tbl.dataset && tbl.dataset.opsFront === '1') return;   // 已处理，避免重复搬运
-      const firstRow = tbl.querySelector('tbody tr');
-      if (!firstRow) return;
-      const cells = Array.prototype.slice.call(firstRow.children);
-      let opIdx = -1;
-      for (let i = 0; i < cells.length; i++) {
-        if (cells[i].classList && cells[i].classList.contains('op-cell')) { opIdx = i; break; }
-      }
-      if (opIdx <= 0) { if (tbl.dataset) tbl.dataset.opsFront = '1'; return; }  // 没找到 / 已经在最前
-      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
-        const td = tr.children[opIdx];
-        if (td) tr.insertBefore(td, tr.firstChild);
-      });
+      const firstOp = tbl.querySelector('tbody tr td.op-cell');
+      if (!firstOp) { if (tbl.dataset) tbl.dataset.opsFront = '1'; return; }
+      // 表头去掉「操作」列（有些表头没写 op-cell class，也按列位置/文字兜底）
+      const firstOpIdx = Array.prototype.indexOf.call(firstOp.parentElement.children, firstOp);
       tbl.querySelectorAll('thead tr').forEach(function (tr) {
-        const th = tr.children[opIdx];
-        if (th) tr.insertBefore(th, tr.firstChild);
+        const byIdx = tr.children[firstOpIdx];
+        if (byIdx && byIdx.tagName === 'TH') { byIdx.remove(); return; }
+        const byText = Array.prototype.find.call(tr.children, function (th) {
+          return th.tagName === 'TH' && String(th.textContent || '').trim() === '操作';
+        });
+        if (byText) byText.remove();
+      });
+      const headerOp = tbl.querySelector('thead th.op-cell');
+      if (headerOp) headerOp.remove();
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        if (tr.classList && tr.classList.contains('op-row')) return;
+        const cells = Array.prototype.slice.call(tr.children);
+        const opCell = cells.find(function (td) { return td.classList && td.classList.contains('op-cell'); });
+        if (!opCell) return;
+        const total = cells.length;
+        const actionTd = document.createElement('td');
+        actionTd.className = 'op-row-cell';
+        actionTd.colSpan = Math.max(1, total - 1);
+        while (opCell.firstChild) actionTd.appendChild(opCell.firstChild);
+        const actionTr = document.createElement('tr');
+        actionTr.className = 'op-row';
+        actionTr.appendChild(actionTd);
+        if (tr.parentNode) tr.parentNode.insertBefore(actionTr, tr.nextSibling);
+        opCell.remove();
       });
       if (tbl.dataset) tbl.dataset.opsFront = '1';
     });
@@ -1404,7 +1551,9 @@ function _initOpsToFront() {
         for (let j = 0; j < added.length; j++) {
           const n = added[j];
           if (!n || n.nodeType !== 1) continue;
-          if (n.tagName === 'TABLE' || (n.querySelector && n.querySelector('table'))) _opsToFront(n);
+          const tbl = (n.tagName === 'TABLE') ? n : (n.closest ? n.closest('table') : null);
+          if (tbl) _opsToFront(tbl);
+          else if (n.querySelector && n.querySelector('table')) _opsToFront(n);
         }
       }
     });
@@ -1549,6 +1698,34 @@ async function compressImageToMax(dataUrl, maxBytes) {
   }
   if (lastOut && _dataUrlBytes(lastOut) <= maxBytes) return lastOut;
   throw new Error('头像无法压缩到 ' + Math.round(maxBytes / 1024) + 'KB，请换一张更简单的图片');
+}
+
+// 后台改头像时同步生成 80×80 小图，好友列表/地图列表才能及时显示
+function makeAdminAvatarThumb(dataUrl) {
+  return new Promise(resolve => {
+    if (!dataUrl || !/^data:image\//i.test(dataUrl)) return resolve('');
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const SIZE = 80;
+        const side = Math.min(img.width || SIZE, img.height || SIZE);
+        const sx = Math.max(0, ((img.width || side) - side) / 2);
+        const sy = Math.max(0, ((img.height || side) - side) / 2);
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE);
+        let out = canvas.toDataURL('image/jpeg', 0.35);
+        if (out.length > 12000) out = canvas.toDataURL('image/jpeg', 0.22);
+        resolve(out.length <= 12000 ? out : '');
+      } catch (e) { resolve(''); }
+    };
+    img.onerror = () => resolve('');
+    img.src = dataUrl;
+  });
 }
 
 // ===== 登录 =====
@@ -1815,7 +1992,7 @@ function renderPlayerList() {
         <button class="row-op take" onclick="adjustGold('${safeId}', -100)">-100玄币</button>
         <button class="row-op give" onclick="adjustGoldPrompt('${safeId}')">💰改玄币</button>
         <button class="row-op edit" onclick='editPlayer(${JSON.stringify(p)})'>编辑</button>
-        <button class="row-op code" style="background:rgba(255,140,0,.2);border:1px solid #ff8c00;" onclick="openEditDmPanel('${safeId}','${safeDm}','${safeName}')">🔑改DM</button>
+        <button class="row-op code" style="background:rgba(255,140,0,.2);border:1px solid #ff8c00;" onclick="openEditDmPanel('${safeId}','${safeDm}','${safeName}')">🔑改账号</button>
         <button class="row-op code" onclick="setPlayerOrderPrompt('${safeId}',${so})">#顺序</button>
         <button class="row-op code" onclick="openPlayerInventoryPanel('${safeId}','${safeName}')">🎒背包</button>
         <button class="row-op code" style="background:rgba(46,232,78,.18);border:1px solid #2ee84e;" onclick="showPlayerCultivation('${safeId}','${safeName}')">🧘 修行 / 门派副业</button>
@@ -1995,7 +2172,11 @@ async function editPlayer(p) {
       fields.treasure_count_date = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
     }
     const av = $("m_avatar").value.trim();
-    if (av && av.length < 100000) fields.avatar = av;
+    if (av && av.length < 100000) {
+      fields.avatar = av;
+      const thumb = await makeAdminAvatarThumb(av);
+      if (thumb) fields.avatar_thumb = thumb;
+    }
     if (av && av.length >= 100000) return toast('头像过大（限制 100KB），请重新选择或先用工具压缩', 'err');
     // "默认开启绑定上限值"勾选 → 写入 cap_bound 字段
     const capBoundEl = $("m_cap_bound");
@@ -2012,27 +2193,27 @@ async function editPlayer(p) {
 
 // 编辑玩家 DM（登录账号）：改 dm 字段并同步所有引用
 async function openEditDmPanel(id, currentDm, name) {
-  showModal('🔑 编辑 DM：' + name, `
+  showModal('🔑 修改登录账号：' + name, `
     <div style="font-size:3vw;color:rgba(255,255,255,.6);margin-bottom:2vw;line-height:1.6;">
       玩家：<b style="color:#fff;">${escapeHtml(name||id)}</b><br>
-      当前 DM：<span style="font-family:monospace;color:#0ff;">${escapeHtml(currentDm)}</span><br>
-      ⚠️ 修改后玩家需要用新 DM 登录；后台会同步更新所有关联数据（好友/聊天/交易/签到/帖子等）。
+      当前登录账号：<span style="font-family:monospace;color:#0ff;">${escapeHtml(currentDm)}</span><br>
+      ✅ 新账号：1~5 位英文或数字；旧账号会自动记录，老玩家输入旧账号时会提示新账号。
     </div>
-    <div class="form-row full"><div><label>新 DM（≥5 位，必须含字母，不能与现有玩家重复）</label>
-      <input id="new_dm_input" value="" placeholder="例: abc123" maxlength="20" autocomplete="off"></div></div>
-    <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">💡 修改后该玩家所有数据自动迁移；老的 dm 字段会被释放可重新使用。</div>
+    <div class="form-row full"><div><label>新 DM（1~5 位英文或数字，不能与现有玩家重复）</label>
+      <input id="new_dm_input" value="" placeholder="例: abc12 / 12345" maxlength="5" pattern="[A-Za-z0-9]{1,5}" autocomplete="off"></div></div>
+    <div style="font-size:2.6vw;color:rgba(255,255,255,.4);margin-top:1vw;line-height:1.6;">💡 修改后该玩家所有数据自动迁移；旧账号会保留为登录别名，不会被直接遗忘。</div>
   `, async () => {
     const newDm = ($("new_dm_input").value || '').trim();
     if (!newDm) return toast('请填写新 DM', 'err');
-    if (newDm.length < 5) return toast('新 DM 至少 5 位', 'err');
-    if (!/[a-zA-Z]/.test(newDm)) return toast('新 DM 必须包含字母', 'err');
+    if (!/^[A-Za-z0-9]{1,5}$/.test(newDm)) return toast('新 DM 只能是 1~5 位英文或数字', 'err');
     if (newDm === currentDm) return toast('新 DM 与当前相同', 'err');
     if (!await uiConfirm(`确认把玩家【${name}】的 DM 从 ${currentDm} 改为 ${newDm}？\n\n此操作会同步所有关联数据，请确认无误！`)) return;
     const res = await api('/api/changeId', { method: 'POST', body: JSON.stringify({ dm: currentDm, newDm }) });
     if (res.error) return toast('修改失败：' + res.error, 'err');
     toast('已修改，新 DM：' + newDm, 'ok', 2000);
     closeModal();
-    updatePlayerLocal(id, { dm: newDm });
+    // ID 和 dm 同时变了，不能只改本地旧 id 的卡片，直接重新拉列表
+    if (typeof loadPlayers === 'function') loadPlayers();
   }, '保存');
 }
 
@@ -2727,7 +2908,7 @@ async function showRecycleBin() {
 
 function showCreatePlayer() {
   showModal('新建玩家', `
-    <div class="form-row"><div><label>玩家 ID</label><input id="c_id" maxlength="20" placeholder="如 00002"></div>
+    <div class="form-row"><div><label>玩家 ID（登录账号，1~5 位英文或数字）</label><input id="c_id" maxlength="5" pattern="[A-Za-z0-9]{1,5}" placeholder="如 00002 / abc12"></div>
       <div><label>姓名</label><input id="c_name" maxlength="20" placeholder="如 圣骑士"></div></div>
     <div class="form-row"><div><label>门派</label><input id="c_sect" value="散人" maxlength="20"></div>
       <div><label>等级</label><input id="c_lv" type="number" value="1" min="1"></div></div>
@@ -2770,6 +2951,7 @@ function showCreatePlayer() {
   `, async () => {
     const id = $("c_id").value.trim(), name = $("c_name").value.trim();
     if (!id || !name) return toast('ID 和姓名必填', 'err');
+    if (!/^[A-Za-z0-9]{1,5}$/.test(id)) return toast('玩家 ID 只能是 1~5 位英文或数字', 'err');
     const avatar = $("c_avatar").value.trim();
     if (avatar && avatar.length > 100000) {
       return toast('头像过大（限制 100KB），请重新选择或先用工具压缩', 'err');
@@ -2798,6 +2980,10 @@ function showCreatePlayer() {
       uid: $("c_uid").value.trim(),
       avatar,
     };
+    if (avatar) {
+      const thumb = await makeAdminAvatarThumb(avatar);
+      if (thumb) fields.avatar_thumb = thumb;
+    }
     const res = await api('/api/admin/createPlayer', { method: 'POST', body: JSON.stringify(fields) });
     if (res.error) return toast(res.error, 'err');
     toast(`已创建（UID=${res.uid}）`); closeModal(); loadPlayers();
@@ -2881,7 +3067,7 @@ function showCreatePlace() {
     if (res.error) return toast(res.error, 'err');
     toast('已创建'); closeModal(); loadPlaces();
   });
-  setTimeout(() => bindImageUpload('p_image_file', 'p_image', 'p_image_preview'), 50);
+  setTimeout(() => bindImageUpload('p_image_file', 'p_image', 'p_image_preview', 60 * 1024), 50);
 }
 
 function editPlace(id) {
@@ -2937,7 +3123,7 @@ function editPlace(id) {
     loadPlaces();
   });
   setTimeout(() => { const sel = $("ep_enabled"); if (sel) sel.value = (p.enabled === 1 || p.enabled === true) ? '1' : '0'; }, 50);
-  setTimeout(() => bindImageUpload('ep_image_file', 'ep_image', 'ep_image_preview'), 50);
+  setTimeout(() => bindImageUpload('ep_image_file', 'ep_image', 'ep_image_preview', 60 * 1024), 50);
 }
 
 async function deletePlace(id) {
@@ -3629,7 +3815,7 @@ function showCreateItem() {
   });
   // 绑定图片上传
   setTimeout(() => {
-    bindImageUpload('i_icon_file', 'i_icon', 'i_icon_preview');
+    bindImageUpload('i_icon_file', 'i_icon', 'i_icon_preview', 60 * 1024);
     // 宝盒勾选切换（新建道具默认无 boxItems）
     const cb = $("i_isBox"); if (cb) cb.onchange = () => toggleBoxSection('i');
   }, 50);
@@ -3702,7 +3888,7 @@ async function editLibraryItem(id) {
     toast('已更新（不影响已上架副本）'); closeModal(); loadItemsAdmin();
   });
   setTimeout(() => {
-    bindImageUpload('ei_icon_file', 'ei_icon', 'ei_icon_preview');
+    bindImageUpload('ei_icon_file', 'ei_icon', 'ei_icon_preview', 60 * 1024);
     // 宝盒勾选切换
     const cb = $("ei_isBox"); if (cb) cb.onchange = () => toggleBoxSection('ei');
     // 渲染已有 boxItems 行
@@ -3816,7 +4002,7 @@ async function editShopEntry(id) {
     toast('已更新'); closeModal(); loadItemsAdmin();
   });
   setTimeout(() => {
-    bindImageUpload('es_icon_file', 'es_icon', 'es_icon_preview');
+    bindImageUpload('es_icon_file', 'es_icon', 'es_icon_preview', 60 * 1024);
     // 宝盒勾选切换
     const cb = $("es_isBox"); if (cb) cb.onchange = () => toggleBoxSection('es');
     // 渲染已有 boxItems 行
@@ -4029,6 +4215,7 @@ async function loadSidejobAdmin() {
         <div class="op-wrap">
           <button class="row-op edit" onclick="editSidejob('${escapeHtml(sj.id)}')">编辑</button>
           <button class="row-op code" onclick="manageSidejobSkills('${escapeHtml(sj.id)}','${escapeHtml(sj.name)}')">技能</button>
+          <button class="row-op code" style="background:rgba(192,132,252,.16);border:1px solid rgba(192,132,252,.5);" onclick="copySidejobPackage('${escapeHtml(sj.id)}','${escapeHtml(sj.name)}')">📋 复制</button>
           <button class="row-op give" onclick="bindSidejobPlayer('${escapeHtml(sj.id)}','${escapeHtml(sj.name)}')">绑玩家</button>
           <button class="row-op take" onclick="unbindSidejobPlayer('${escapeHtml(sj.id)}')">解绑</button>
           <button class="row-op del" onclick="deleteSidejob('${escapeHtml(sj.id)}','${escapeHtml(sj.name)}')">删</button>
@@ -4511,6 +4698,24 @@ async function copySidejobSkill(srcId) {
   loadSidejobAdmin();
 }
 
+// 复制整个副业（含所有技能），ID 自动追加 1/2/3...
+async function copySidejobPackage(id, name) {
+  if (!await uiConfirm(`确认复制副业【${name || id}】？\n\n会复制整个副业及全部技能配置，不会复制玩家绑定。\n新副业 ID 会自动在后面加数字，技能 ID 也会自动加数字避免重复。`)) return;
+  const r = await api('/api/admin/copySidejob', { method: 'POST', body: JSON.stringify({ src_id: id }) });
+  if (r.error) return toast(r.error, 'err');
+  toast(`已复制为 ${r.new_id}（含 ${r.skill_count || 0} 个技能）`, 'ok', 2600);
+  loadSidejobAdmin();
+}
+
+// 复制整个门派（含所有技能），ID 自动追加 1/2/3...
+async function copySectPackage(id, name) {
+  if (!await uiConfirm(`确认复制门派【${name || id}】？\n\n会复制整个门派及全部技能配置，不会复制玩家绑定。\n新门派 ID 会自动在后面加数字，技能 ID 也会自动加数字避免重复。`)) return;
+  const r = await api('/api/admin/copySect', { method: 'POST', body: JSON.stringify({ src_id: id }) });
+  if (r.error) return toast(r.error, 'err');
+  toast(`已复制为 ${r.new_id}（含 ${r.skill_count || 0} 个技能）`, 'ok', 2600);
+  loadSectAdmin();
+}
+
 // ===== 修行 / 门派管理 =====
 async function loadSectAdmin() {
   const res = await api('/api/admin/sectList');
@@ -4538,6 +4743,7 @@ async function loadSectAdmin() {
         <div class="op-wrap">
           <button class="row-op edit" onclick="editSect('${escapeHtml(s.id)}')">编辑</button>
           <button class="row-op code" onclick="manageSectSkills('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">技能</button>
+          <button class="row-op code" style="background:rgba(255,215,0,.16);border:1px solid rgba(255,215,0,.5);" onclick="copySectPackage('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">📋 复制</button>
           <button class="row-op give" onclick="bindSectPlayer('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">绑玩家</button>
           <button class="row-op take" onclick="unbindSectPlayer('${escapeHtml(s.id)}')">解绑</button>
           <button class="row-op del" onclick="deleteSect('${escapeHtml(s.id)}')">删</button>
@@ -5423,7 +5629,7 @@ async function loadAnnouncementAdmin() {
       html += `<tr>
         <td>${pinMark}</td>
         <td>${escapeHtml(a.author||'-')}</td>
-        <td style="max-width:30vw;overflow:hidden;text-overflow:ellipsis;">${escapeHtml((a.content||'').substring(0,30))}</td>
+        <td class="post-title-cell">${escapeHtml((a.content||'').substring(0,30))}</td>
         <td>${a.image ? '<span style="color:#4d8cff;">[图]</span>' : '-'}</td>
         <td>${statusTxt}</td>
         <td><span class="muted">${fmtTs(a.created_at)}</span></td>
@@ -5564,7 +5770,7 @@ async function loadPostsAdmin() {
     const statusTxt = p.status === 'closed' ? '<span style="color:#888;">已下架</span>' : '<span style="color:#2ee84e;">上架</span>';
     html += `<tr>
       <td>${pinMark}</td>
-      <td>${p.image ? '<span style="color:#4d8cff;">[图]</span> ' : ''}${escapeHtml(p.title)}</td>
+      <td class="post-title-cell">${p.image ? '<span style="color:#4d8cff;">[图]</span> ' : ''}${escapeHtml(p.title)}</td>
       <td>${escapeHtml(p.author_name||p.author||'-')}</td>
       <td>${bountyTxt}</td>
       <td>${statusTxt}</td>
@@ -5956,7 +6162,7 @@ function showCreatePost() {
     if (res.error) return toast(res.error, 'err');
     toast('已发布'); closeModal(); loadPostsAdmin();
   });
-  setTimeout(() => bindImageUpload('po_image_file', 'po_image', 'po_image_preview'), 50);
+  setTimeout(() => bindImageUpload('po_image_file', 'po_image', 'po_image_preview', 60 * 1024), 50);
 }
 
 async function editPost(id) {
@@ -6003,7 +6209,7 @@ async function editPost(id) {
     if (r.error) return toast(r.error, 'err');
     toast('已更新'); closeModal(); loadPostsAdmin();
   });
-  setTimeout(() => bindImageUpload('ep_image_file', 'ep_image', 'ep_image_preview'), 50);
+  setTimeout(() => bindImageUpload('ep_image_file', 'ep_image', 'ep_image_preview', 60 * 1024), 50);
 }
 
 async function togglePostStatus(id, curStatus) {
@@ -6116,14 +6322,27 @@ async function setBounty(postId, curGold, curItem) {
 }
 
 // ===== 日志 =====
-async function loadLogs() {
+function openAdminLogDrawer() {
+  const ov = $("adminLogOverlay");
+  if (!ov) return;
+  ov.classList.add("show");
+  loadLogs({ sys: "drawerSysTipLogList", op: "drawerLogList" });
+  loadDrawerTreasureLogs();
+}
+function closeAdminLogDrawer() {
+  const ov = $("adminLogOverlay");
+  if (ov) ov.classList.remove("show");
+}
+
+async function loadLogs(target) {
+  const _t = target || {};
   // 并发拉：玩家系统提示 + 玩家操作日志
   const [stRes, lgRes] = await Promise.all([
     api('/api/admin/sysTips?limit=100'),
     api('/api/admin/logs'),
   ]);
   // 渲染玩家系统提示
-  const sysList = $("sysTipLogList");
+  const sysList = $(_t.sys || "sysTipLogList");
   if (stRes.error) {
     sysList.innerHTML = '<div class="empty">' + escapeHtml(stRes.error) + '</div>';
   } else if (!stRes.tips || !stRes.tips.length) {
@@ -6157,7 +6376,7 @@ async function loadLogs() {
     sysList.innerHTML = html;
   }
   // 渲染玩家操作日志（沿用旧逻辑）
-  const list = $("logList");
+  const list = $(_t.op || "logList");
   if (lgRes.error) {
     list.innerHTML = '<div class="empty">' + escapeHtml(lgRes.error) + '</div>';
     return;
@@ -6211,6 +6430,35 @@ async function loadLogs() {
   list.innerHTML = html;
 }
 
+async function loadDrawerTreasureLogs() {
+  const el = $("drawerTreasureLogList");
+  if (!el) return;
+  el.innerHTML = '<div class="empty">加载中…</div>';
+  let logRes;
+  try { logRes = await api('/api/admin/listTreasureLogs?limit=100'); } catch (e) { logRes = { error: String(e && e.message || e) }; }
+  if (logRes.error) { el.innerHTML = '<div class="empty">' + escapeHtml(logRes.error) + '</div>'; return; }
+  const logs = logRes.logs || [];
+  if (!logs.length) { el.innerHTML = '<div class="empty">暂无寻宝日志</div>'; return; }
+  let html = '<table><thead><tr><th>时间</th><th>玩家</th><th>结果</th><th>格子</th><th>奖励</th></tr></thead><tbody>';
+  for (const l of logs) {
+    const rTxt = l.hit ? '<span style="color:#2ee84e;">✓ 命中</span>' : '<span style="color:#888;">✗ 未中</span>';
+    const rew = l.reward || {};
+    let rewTxt = '';
+    if (rew.gold) rewTxt += rew.gold + '玄币 ';
+    if (rew.item_id && rew.qty) rewTxt += `+ ${rew.item_id}×${rew.qty}`;
+    if (!rewTxt) rewTxt = '-';
+    html += `<tr>
+      <td><span class="muted">${fmtTs(l.created_at)}</span></td>
+      <td><span style="color:#ffd700;font-weight:bold;">${escapeHtml(l.from_name||'-')}</span><br><span class="id-tag" style="font-size:2vw;opacity:.6;">${escapeHtml(l.from_id||'-')}</span></td>
+      <td>${rTxt}</td>
+      <td>${escapeHtml(l.click_cell||'-')}</td>
+      <td><span class="muted">${escapeHtml(rewTxt)}</span></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
 
 // ===== 寻宝宝库商品管理（新版）=====
 let _chestItems = [];
@@ -6232,16 +6480,18 @@ async function loadTreasureAdmin() {
   } else {
     const lim = limitRes.daily_limit || 3;
     const limitPanel = `
-      <div style="display:flex;gap:1.5vw;align-items:flex-end;flex-wrap:wrap;">
-        <div style="flex:1;min-width:30vw;">
+      <div style="display:flex;flex-direction:column;gap:1.2vw;align-items:flex-start;">
+        <div style="width:min(100%,360px);">
           <label style="display:block;font-size:2.6vw;color:rgba(255,255,255,.5);margin-bottom:.5vw;">每日次数上限</label>
           <input id="tc_daily_limit" type="number" min="1" max="99" value="${lim}" style="width:100%;padding:2vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;">
         </div>
-        <button class="btn btn-blue" onclick="saveTreasureDailyLimit()">💾 保存</button>
-        <button class="btn btn-green" onclick="showCreateChestItem()">➕ 创建宝箱</button>
-        <button class="btn" style="background:rgba(255,140,0,.25);border:1px solid #ff8c00;color:#fff;" onclick="resetTreasureDaily()">🔄 重置今日次数</button>
-        <button class="btn" style="background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;" onclick="inspectPlayerState()">🔍 调试玩家state</button>
-        <button class="btn" style="background:rgba(255,80,80,.2);border:1px solid #ff5050;color:#fff;" onclick="forceFixPlayerState()">🛠 强制修复</button>
+        <div style="display:flex;gap:1.2vw;align-items:center;flex-wrap:wrap;width:100%;">
+          <button class="btn btn-blue" onclick="saveTreasureDailyLimit()">💾 保存</button>
+          <button class="btn btn-green" onclick="showCreateChestItem()">➕ 创建宝箱</button>
+          <button class="btn" style="background:rgba(255,140,0,.25);border:1px solid #ff8c00;color:#fff;" onclick="resetTreasureDaily()">🔄 重置今日次数</button>
+          <button class="btn" style="background:rgba(77,140,255,.2);border:1px solid #4d8cff;color:#fff;" onclick="inspectPlayerState()">🔍 调试玩家state</button>
+          <button class="btn" style="background:rgba(255,80,80,.2);border:1px solid #ff5050;color:#fff;" onclick="forceFixPlayerState()">🛠 强制修复</button>
+        </div>
       </div>`;
     $("treasureConfigPanel").innerHTML = limitPanel;
   }
@@ -6318,7 +6568,7 @@ function renderChestItems() {
       ${filterBtn('on', '已上架', onCount)}
       ${filterBtn('off', '未上架', _chestItems.length - onCount)}
     </div>
-    ${filtered.length ? `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="min-width:120vw;"><thead><tr><th>ID</th><th>名称</th><th>分类</th><th>物品</th><th>数量</th><th>金币</th><th>自身概率%</th><th>总概率%</th><th>库存</th><th>状态</th><th style="min-width:36vw;">操作</th></tr></thead><tbody>${filtered.map(it => renderChestRow(it, _chestTotalProb)).join('')}</tbody></table></div>` : '<div class="empty">暂无宝箱商品</div>'}
+    ${filtered.length ? `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="min-width:120vw;"><thead><tr><th>ID</th><th>名称</th><th>分类</th><th>物品</th><th>数量</th><th>金币</th><th>自身概率%</th><th>总概率%</th><th>库存</th><th>状态</th></tr></thead><tbody>${filtered.map(it => renderChestRow(it, _chestTotalProb)).join('')}</tbody></table></div>` : '<div class="empty">暂无宝箱商品</div>'}
   `;
   chestPanel.innerHTML = html;
 }
@@ -6347,14 +6597,14 @@ function renderChestRow(it, totalProb) {
     <td style="white-space:nowrap;color:#4d8cff;font-weight:bold;" title="在已上架宝库中的相对概率">${totalPct}%</td>
     <td style="white-space:nowrap;"><span style="${stockColor}font-weight:bold;">${it.stock||0}</span></td>
     <td style="white-space:nowrap;">${status}</td>
-    <td class="op-cell" style="min-width:36vw;">
-      <div class="op-wrap" style="justify-content:flex-end;">
-        <button class="row-op edit" onclick="showEditChestItem('${escapeHtml(it.id)}')">编辑</button>
-        <button class="row-op ${it.enabled?'off':'on'}" onclick="toggleChestItem('${escapeHtml(it.id)}', ${!it.enabled})">${it.enabled?'下架':'上架'}</button>
-        <button class="row-op del" onclick="deleteChestItem('${escapeHtml(it.id)}','${escapeHtml(it.name||'')}')">删</button>
-      </div>
-    </td>
-  </tr>`;
+  </tr>
+  <tr class="op-row"><td colspan="10" class="op-row-cell">
+    <div class="op-wrap">
+      <button class="row-op edit" onclick="showEditChestItem('${escapeHtml(it.id)}')">编辑</button>
+      <button class="row-op ${it.enabled?'off':'on'}" onclick="toggleChestItem('${escapeHtml(it.id)}', ${!it.enabled})">${it.enabled?'下架':'上架'}</button>
+      <button class="row-op del" onclick="deleteChestItem('${escapeHtml(it.id)}','${escapeHtml(it.name||'')}')">删</button>
+    </div>
+  </td></tr>`;
 }
 
 function copyChestId(id) {
@@ -6470,7 +6720,7 @@ async function loadGameConfig() {
       // ★ 懒备份配置
       if ($("cfg_backup_auto_enabled")) $("cfg_backup_auto_enabled").value = (c.backup_auto_enabled === false) ? "0" : "1";
       if ($("cfg_backup_auto_interval_hours")) $("cfg_backup_auto_interval_hours").value = (c.backup_auto_interval_hours != null ? c.backup_auto_interval_hours : 24);
-      if ($("cfg_backup_auto_keep")) $("cfg_backup_auto_keep").value = (c.backup_auto_keep != null ? c.backup_auto_keep : 3);
+      if ($("cfg_backup_auto_keep")) $("cfg_backup_auto_keep").value = Math.min(2, (c.backup_auto_keep != null ? c.backup_auto_keep : 2));
       if (typeof gmkVanishUI === "function") gmkVanishUI();
   if ($("cfg_chest_interval_hours")) $("cfg_chest_interval_hours").value = c.chest_interval_hours != null ? c.chest_interval_hours : 3;
   if ($("cfg_chest_spawn_count")) $("cfg_chest_spawn_count").value = c.chest_spawn_count != null ? c.chest_spawn_count : 3;
@@ -6583,7 +6833,7 @@ async function saveGameConfig() {
         chest_vanish_count: getInt("cfg_chest_vanish_count", 1),
         backup_auto_enabled: ($("cfg_backup_auto_enabled") || {}).value === "1",
         backup_auto_interval_hours: getInt("cfg_backup_auto_interval_hours", 24),
-        backup_auto_keep: getInt("cfg_backup_auto_keep", 3),
+        backup_auto_keep: Math.min(2, getInt("cfg_backup_auto_keep", 2)),
     // 五子棋参数
     ...gmkCollectCfg(),
   };
@@ -7423,7 +7673,7 @@ async function saveMerchantConfig() {
     chest_vanish_count: getInt("cfg_chest_vanish_count", 1),
     backup_auto_enabled: ($("cfg_backup_auto_enabled") || {}).value === "1",
     backup_auto_interval_hours: getInt("cfg_backup_auto_interval_hours", 24),
-    backup_auto_keep: getInt("cfg_backup_auto_keep", 3),
+    backup_auto_keep: Math.min(2, getInt("cfg_backup_auto_keep", 2)),
   };
   const res = await api('/api/admin/saveGameConfig', { method: 'POST', body: JSON.stringify({ fields }) });
   if (res.error) return toast('保存失败：' + res.error, 'err');
