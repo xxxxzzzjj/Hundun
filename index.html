@@ -5691,6 +5691,13 @@ async function showIncomingRequestModal(req, onDone) {
 
   const fromId = req.from_id;
 
+  let _friendReqFinished = false;
+  function _finishFriendRequest() {
+    if (_friendReqFinished) return;
+    _friendReqFinished = true;
+    try { onDone && onDone(); } catch (e) { }
+  }
+
   showModal(`🔔 好友申请`, `
 
     <div style="text-align:center;padding:2vw 0;">
@@ -5704,28 +5711,43 @@ async function showIncomingRequestModal(req, onDone) {
   `, async () => {
 
     // "同意"按钮
+    let r;
+    try {
+      r = await api('/api/friendAccept', { dm: curId, requestId: req.id });
+    } catch (e) {
+      r = { error: '网络异常，请重试' };
+    }
 
-    const r = await api('/api/friendAccept', { dm: curId, requestId: req.id });
-
-    if (r.error) { toast(r.error, 'err'); onDone && onDone(); return; }
+    if (!r || r.error) {
+      toast((r && r.error) || '操作失败', 'err');
+      // 同意失败不要误触发“拒绝”；清掉 onCancel 后关闭
+      _currentModalOnCancel = null;
+      closeModal();
+      _finishFriendRequest();
+      return;
+    }
 
     toast(`已添加 ${fromName} 为好友`, 'ok', 2000);
 
-    await loadFriendIds();
+    try { await loadFriendIds(); } catch (e) { }
 
-    req._accepted = true;  // 关键修复：标记已接受，closeModal 触发的 onCancel 不要再 reject
+    req._accepted = true;  // 标记已接受，closeModal 触发的 onCancel 不要再 reject
     closeModal();
-
-    onDone && onDone();
+    _finishFriendRequest();
 
   }, '同意', () => {
-    // 关键修复：onCancel（拒绝 / 取消 / 返回键 / 背景点击 都会走这里）
-    //   1) 调后端 reject API（之前的逻辑）—— 但只调一次（如果是"同意"已经走 ok 路径了，这里跳过）
-    //   2) 兜底调 onDone 让 _modalShowingIncoming 不卡死
+    // 取消 / 拒绝 / 返回键 / 背景点击都会走这里
     if (!req._accepted) {
       api('/api/friendReject', { dm: curId, requestId: req.id }).catch(() => {});
     }
-    onDone && onDone();
+    _finishFriendRequest();
+
+    // 点击“取消”时 modal 仍在 show 状态，需要主动关闭；
+    // 先清掉 _currentModalOnCancel，避免 closeModal 再次回调自身的递归。
+    if ($("modal") && $("modal").classList.contains('show')) {
+      _currentModalOnCancel = null;
+      closeModal();
+    }
   });
 
 }
@@ -8241,7 +8263,9 @@ async function switchTab(tab, opts) {
 
 
 (function () {
-  var ORDER = ['profile', 'inventory', 'shop'];
+  // 左→右：地图 ← 个人信息 ← 背包 ← 商城
+  // 信息页左→右滑 = 地图；信息页右→左滑 = 背包
+  var ORDER = ['map', 'profile', 'inventory', 'shop'];
   var sx = 0, sy = 0, arming = false;
   function onStart(e) {
     if (!e.touches || e.touches.length !== 1) { arming = false; return; }
