@@ -1354,11 +1354,6 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   transform-origin:0 0;
 }
 .hall-hero.spinning .hero-orbit { animation-duration:.62s; }
-/* 旋转中滑动触发的纯本地彩蛋：再转一圈，不触发任何导航 */
-.hall-hero.fun-spin .hero-orbit { animation:heroOrbitSpin .62s cubic-bezier(.2,.8,.2,1) !important; }
-.hall-hero.fun-spin .hero-btn-inner { animation:heroCounterSpin .62s linear !important; }
-.hall-hero.spinning, .hall-hero.fun-spin { touch-action:none; }
-.hall-hero.fun-spin .hero-btn { pointer-events:none; }
 .hall-hero.no-spin .hero-orbit { animation:none !important; }
 .hall-hero.no-spin .hero-btn-inner { animation:heroBtnGlow 2.8s ease-in-out infinite !important; }
 .hero-btn {
@@ -1367,7 +1362,6 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   padding:0; border:none; background:transparent; cursor:pointer;
   transform:rotate(calc(-90deg + var(--i) * 45deg)) translateY(calc(var(--hero-r) * -1)) rotate(calc(90deg - var(--i) * 45deg));
   -webkit-tap-highlight-color:transparent;
-  touch-action:none;
 }
 .hero-btn::before {
   content:""; position:absolute; inset:-24%; border-radius:50%; pointer-events:none; z-index:0;
@@ -2241,9 +2235,8 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   border:1px solid rgba(255,255,255,.1);
   background:rgba(0,0,0,.22);
 }
-#inlineSkillsHost .skill-sect-box .collapse-head { color:#ffe27a !important; text-shadow:0 1px 2px rgba(0,0,0,.8),0 0 10px rgba(255,215,0,.25); border-color:rgba(255,215,0,.26); }
-#inlineSkillsHost .skill-sidejob-box .collapse-head { color:#e4efff !important; text-shadow:0 1px 2px rgba(0,0,0,.8),0 0 10px rgba(205,225,255,.22); border-color:rgba(208,224,246,.28); }
-#inlineSkillsHost .skill-sidejob-box .collapse-arrow { color:rgba(220,236,255,.9) !important; }
+#inlineSkillsHost .skill-sect-box .collapse-head { border-color:rgba(255,215,0,.26) !important; }
+#inlineSkillsHost .skill-sidejob-box .collapse-head { border-color:rgba(208,224,246,.28) !important; }
 #inlineSkillsHost .skill-sect-row,
 #inlineSkillsHost .skill-sidejob-row {
   border:1px solid rgba(255,255,255,.10) !important;
@@ -2252,7 +2245,6 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 }
 #inlineSkillsHost .skill-sect-row { border-color:rgba(255,215,0,.18) !important; }
 #inlineSkillsHost .skill-sidejob-row { border-color:rgba(208,224,246,.22) !important; }
-#inlineSkillsHost .skill-sidejob-row .profile-skill-name { color:#e4efff !important; text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 8px rgba(205,225,255,.22); }
 @keyframes skillBorderFlow { 0% { background-position:180% 0; } 100% { background-position:-180% 0; } }
 @keyframes skillBorderBreath { 0%,100% { opacity:.35; } 50% { opacity:.95; } }
 
@@ -4971,12 +4963,107 @@ function toggleIdVisibility() { toggleDmVisibility(); }
 
 
 // ============ 按钮音效 ============
+// 短音效用 Web Audio + Cache API：第一次下载后缓存到本地，之后直接播放，不再走网络/HTMLAudio 播放权限
+const _SFX_FILES = { button: 'button.mp3', spinStart: 'spin_start.mp3', spinDone: 'spin_done.mp3' };
+const _sfxBuffers = {};
+const _sfxLoading = {};
+let _sfxCtx = null;
+let _sfxCacheName = 'hundun-sfx-v1';
+
+function _sfxCtxGet() {
+  if (_sfxCtx) return _sfxCtx;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    _sfxCtx = new AC();
+  } catch (e) { _sfxCtx = null; }
+  return _sfxCtx;
+}
+
+async function _sfxFetchBlob(url) {
+  let cache = null;
+  try {
+    if ('caches' in window && /^https?:/i.test(location.protocol)) {
+      cache = await caches.open(_sfxCacheName);
+      const hit = await cache.match(url);
+      if (hit) return await hit.blob();
+    }
+  } catch (e) { cache = null; }
+  try {
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res || !res.ok) return null;
+    if (cache) {
+      try { await cache.put(url, res.clone()); } catch (e) { }
+    }
+    return await res.blob();
+  } catch (e) { return null; }
+}
+
+async function _sfxLoad(name) {
+  if (_sfxBuffers[name]) return _sfxBuffers[name];
+  if (_sfxLoading[name]) return _sfxLoading[name];
+  _sfxLoading[name] = (async function () {
+    try {
+      const url = _SFX_FILES[name];
+      if (!url) return null;
+      const blob = await _sfxFetchBlob(url);
+      if (!blob) return null;
+      const ctx = _sfxCtxGet();
+      if (!ctx) return null;
+      const ab = await blob.arrayBuffer();
+      const buf = await new Promise(function (resolve, reject) {
+        try { ctx.decodeAudioData(ab.slice(0), resolve, reject); } catch (e) { reject(e); }
+      });
+      _sfxBuffers[name] = buf;
+      return buf;
+    } catch (e) { return null; }
+    finally { delete _sfxLoading[name]; }
+  })();
+  return _sfxLoading[name];
+}
+
+// 返回 true 表示已经用缓冲播放；false 时退回 <audio>
+function _playSfx(name) {
+  try {
+    const buf = _sfxBuffers[name];
+    if (!buf) { _sfxLoad(name); return false; }
+    const ctx = _sfxCtxGet();
+    if (!ctx) return false;
+    const startBuffer = function () {
+      try {
+        const src = ctx.createBufferSource();
+        const gain = ctx.createGain();
+        src.buffer = buf;
+        gain.gain.value = 0.55;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(0);
+      } catch (e) { }
+    };
+    // 必须等 AudioContext 恢复后再 start，否则右下角经常没声音
+    if (ctx.state === 'suspended') {
+      try { ctx.resume().then(startBuffer).catch(function () { }); } catch (e) { }
+    } else {
+      startBuffer();
+    }
+    return true;
+  } catch (e) { return false; }
+}
 
 function playSound() {
-
-  try { $("btnSound").currentTime = 0; $("btnSound").play().catch(()=>{}); } catch {}
-
+  if (_playSfx('button')) return;
+  try {
+    const a = $("btnSound");
+    if (!a) return;
+    a.currentTime = 0;
+    a.play().catch(() => { });
+  } catch (e) { }
 }
+
+// 页面启动后后台预下载 3 个短音效，首次点击若还没解码完就自动退回原 audio
+setTimeout(function () {
+  Object.keys(_SFX_FILES).forEach(function (n) { _sfxLoad(n); });
+}, 120);
 
 
 
@@ -5064,15 +5151,14 @@ async function refreshAll(force) {
 
 // 全局点击音效
 
-document.addEventListener('click', e => {
-
-  if (e.target.closest('button, .player-pin, .tab, .action-btn, .mini-btn, .dice-option, .top-btn, .sw, .back-btn, .shop-item, .post-item')) {
-
+document.addEventListener('click', function (e) {
+  const t = e.target;
+  if (!t || !t.closest) return;
+  // 捕获阶段播放，按钮内部 stopPropagation() 也不会吞掉音效；[onclick] 覆盖非 button 的可点击元素
+  if (t.closest('button, [onclick], .player-pin, .tab, .action-btn, .mini-btn, .dice-option, .top-btn, .sw, .back-btn, .shop-item, .post-item')) {
     playSound();
-
   }
-
-});
+}, true);
 
 
 
@@ -7618,6 +7704,7 @@ let _hallNavBusy = false;
 function _hallSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function _playHallSpinAudio(kind) {
+  if (_playSfx(kind === 'start' ? 'spinStart' : 'spinDone')) return;
   const id = kind === 'start' ? 'hallSpinStartSfx' : 'hallSpinDoneSfx';
   const a = $(id);
   if (!a) return;
@@ -10783,7 +10870,7 @@ async function showSkills() {
 
             <div style="flex:1;min-width:0;">
 
-              <div class="profile-skill-name" style="font-weight:bold;font-size:2.95vw;color:#dce9ff;text-shadow:0 0 10px rgba(205,225,255,.35),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#eef5ff,#aebed4);color:#26313f;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''} <span style="font-size:2.15vw;font-weight:600;color:rgba(220,235,255,.72);">${lvTag}</span></div>
+              <div class="profile-skill-name" style="font-weight:bold;font-size:2.95vw;color:#ffd35c;text-shadow:0 0 10px rgba(255,196,0,.45),0 1px 2px rgba(0,0,0,.6);letter-spacing:.01em;">${escapeHtml(s.name)}${(Array.isArray(s.tags) && s.tags.length) ? s.tags.map(t => ` <span style="display:inline-block;background:linear-gradient(180deg,#ffd700,#c8a300);color:#5b3a00;font-size:2.3vw;font-weight:800;padding:.25vw 1.1vw;border-radius:99px;margin-left:.6vw;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.45);">${escapeHtml(t)}</span>`).join('') : ''} <span style="font-size:2.15vw;font-weight:600;color:rgba(255,220,140,.72);">${lvTag}</span></div>
 
               ${greyed ? `<div style="font-size:2.1vw;color:rgba(255,255,255,.42);margin-top:.4vw;">🔒 未达等级 ${s.lv_required}</div>` : ''}
 
@@ -13267,7 +13354,43 @@ function closeSettings() {
 
 // ============ 音乐 ============
 
-const bgm = new Audio("bgm.mp3"); bgm.loop = true; bgm.volume = .6;
+const bgm = new Audio("bgm.mp3"); bgm.loop = true; bgm.volume = .6; bgm.preload = 'auto';
+
+// BGM 本地缓存：第一次实际播放后把整首歌存入 Cache API，下次进入直接读本地 Blob
+const _BGM_CACHE_NAME = 'hundun-bgm-v1';
+const _bgmCachedUrls = {};
+const _bgmCacheWarming = {};
+async function _bgmLoadCached(src) {
+  try {
+    if (!('caches' in window) || !/^https?:/i.test(location.protocol)) return;
+    const c = await caches.open(_BGM_CACHE_NAME);
+    const hit = await c.match(src);
+    if (!hit) return;
+    const blob = await hit.blob();
+    if (!blob || !blob.size) return;
+    _bgmCachedUrls[src] = URL.createObjectURL(blob);
+  } catch (e) { }
+}
+async function _bgmWarmCache(src) {
+  try {
+    if (!src || src.indexOf('blob:') === 0) return;
+    if (!('caches' in window) || !/^https?:/i.test(location.protocol)) return;
+    if (_bgmCacheWarming[src] || _bgmCachedUrls[src]) return;
+    _bgmCacheWarming[src] = true;
+    const c = await caches.open(_BGM_CACHE_NAME);
+    const hit = await c.match(src);
+    if (!hit) {
+      const res = await fetch(src, { cache: 'force-cache' });
+      if (res && res.ok) {
+        try { await c.put(src, res.clone()); } catch (e) { }
+        // 只在缓存成功后记录，供后续页面加载直接使用
+        _bgmCachedUrls[src] = URL.createObjectURL(await res.blob());
+      }
+    }
+  } catch (e) { }
+  finally { delete _bgmCacheWarming[src]; }
+}
+['bgm.mp3', 'bgm_start.mp3'].forEach(function (src) { setTimeout(function () { _bgmLoadCached(src); }, 400); });
 
 let musicOn = true, playing = false;
 const HALL_BGM_ON_KEY = 'hundun_hall_bgm_on';
@@ -13403,15 +13526,19 @@ function tryMusic(){
   if(!_en || !musicOn) return;
   if(window._gmkAnyLayerOpen && window._gmkAnyLayerOpen()) return;
   const _src = _start ? 'bgm_start.mp3' : 'bgm.mp3';
+  const _playSrc = _bgmCachedUrls[_src] || _src;
   // 已经在放同一首才直接返回；启动页→大厅必须允许切歌
   if(bgm && !bgm.paused && !bgm.ended){
-    if(bgm.getAttribute('src') === _src){ playing = true; return; }
+    const _cur = bgm.getAttribute('src');
+    if(_cur === _src || _cur === _playSrc){ playing = true; return; }
   }
   if(_musicStarting) return;
   try {
-    if (bgm.getAttribute('src') !== _src) { bgm.pause(); bgm.setAttribute('src', _src); bgm.load(); }
+    if (bgm.getAttribute('src') !== _playSrc) { bgm.pause(); bgm.setAttribute('src', _playSrc); bgm.load(); }
   } catch(e) {}
   _musicStarting = true;
+  clearTimeout(window._musicStartGuard);
+  window._musicStartGuard = setTimeout(function () { _musicStarting = false; }, 2200);
   bgm.play().then(()=>{ playing=true; }).catch(()=>{
     if (_src !== 'bgm.mp3') {
       try {
@@ -13419,13 +13546,44 @@ function tryMusic(){
         return bgm.play().then(()=>{ playing=true; }).catch(()=>{ playing=false; });
       } catch(e) { playing=false; }
     }
-  }).finally(()=>{ _musicStarting = false; });
+  }).finally(()=>{ _musicStarting = false; clearTimeout(window._musicStartGuard); });
 }
 
 // 真实播放状态一变化就同步，避免 paused 后 playing 还停在 true
 bgm.addEventListener('play', function(){ playing = true; });
+bgm.addEventListener('playing', function(){
+  playing = true;
+  try { _bgmWarmCache(bgm.getAttribute('src')); } catch (e) { }
+});
 bgm.addEventListener('pause', function(){ playing = false; });
 bgm.addEventListener('ended', function(){ playing = false; });
+// Blob 缓存异常时退回网络文件，避免下次永远播不了
+bgm.addEventListener('error', function(){
+  try {
+    const cur = bgm.getAttribute('src') || '';
+    if (cur.indexOf('blob:') === 0) {
+      for (const k in _bgmCachedUrls) {
+        if (_bgmCachedUrls[k] === cur) {
+          delete _bgmCachedUrls[k];
+          bgm.setAttribute('src', k);
+          bgm.load();
+          setTimeout(function () { tryMusic(); }, 120);
+          break;
+        }
+      }
+    }
+  } catch (e) { }
+});
+
+// 兜底监视：浏览器/应用切后台、音频焦点被抢后，每 4 秒尝试恢复正在播放的 BGM。
+// 只在音乐开启、页面可见、没有五子棋浮层且 bgm 确实暂停时触发，不会强行重播。
+setInterval(function () {
+  try {
+    if (!musicOn || document.hidden) return;
+    if (window._gmkAnyLayerOpen && window._gmkAnyLayerOpen()) return;
+    if (bgm && bgm.paused && !bgm.ended) tryMusic();
+  } catch (e) { }
+}, 4000);
 
 document.addEventListener("touchstart", tryMusic);
 
@@ -16390,65 +16548,6 @@ window.gmkDoUseCard = function (cardId, target, targets) {
     if (document.hidden) stop();
     else if (curId && host.style.display !== 'none') start();
   });
-})();
-
-/* ===== 轮盘解压彩蛋：旋转中滑动再转一圈，纯本地无跳转 ===== */
-(function initWheelSwipeFun() {
-  const hero = document.getElementById('hallHero');
-  if (!hero) return;
-  let swipe = null, blockClick = false, blockTimer = 0, funTimer = 0;
-
-  function spinningNow(target) {
-    if (!_wheelSpinEnabled) return false;
-    // 轮盘本来就在持续旋转；按在轮盘按钮上滑动即可触发，不必等导航旋转
-    if (hero.classList.contains('spinning') ||
-        hero.classList.contains('fun-spin') ||
-        (typeof _hallNavBusy !== 'undefined' && _hallNavBusy)) return true;
-    return !!(target && target.closest && target.closest('.hero-btn'));
-  }
-
-  function localSpin() {
-    if (!_wheelSpinEnabled) return;
-    hero.classList.remove('fun-spin');
-    void hero.offsetWidth;                 // 强制重启动画
-    hero.classList.add('fun-spin');
-    try { _playHallSpinAudio('start'); } catch (e) { }
-    clearTimeout(funTimer);
-    funTimer = setTimeout(function () {
-      hero.classList.remove('fun-spin');
-      try { _playHallSpinAudio('done'); } catch (e) { }
-    }, 650);
-  }
-
-  hero.addEventListener('pointerdown', function (e) {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (!spinningNow(e.target)) { swipe = null; return; }
-    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId, fired: false };
-  }, { passive: true });
-
-  hero.addEventListener('pointermove', function (e) {
-    if (!swipe || e.pointerId !== swipe.id || swipe.fired) return;
-    if (!_wheelSpinEnabled) { swipe = null; return; }
-    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
-    if (Math.hypot(dx, dy) < 18) return;
-    swipe.fired = true;
-    blockClick = true;
-    clearTimeout(blockTimer);
-    blockTimer = setTimeout(function () { blockClick = false; }, 500);
-    try { e.preventDefault(); } catch (err) { }
-    localSpin();
-  }, { passive: false });
-
-  function endSwipe() { swipe = null; }
-  hero.addEventListener('pointerup', endSwipe, { passive: true });
-  hero.addEventListener('pointercancel', endSwipe, { passive: true });
-  hero.addEventListener('click', function (e) {
-    if (blockClick) {
-      blockClick = false;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, true);
 })();
 
 </script>
