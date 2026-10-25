@@ -10349,8 +10349,8 @@ window.gmkItemSheet = function (itemId) {
   if (unlimitedUse) tags.push("<span style=\"color:#4d8cff;font-size:2.6vw;\">∞ 不消耗</span>");
   if (isPassive) tags.push("<span style=\"color:#2ee84e;font-size:2.6vw;\">💚 持有即生效</span>");
   if (useChance > 0) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">🎲 " + useChance + "/10 成功率</span>");
-  if (item.attrChoiceEnabled) tags.push("<span style=\"color:#6ef5ff;font-size:2.6vw;\">🎯 使用后自选属性</span>");
-  if (item.isBox) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">🎁 奖励包</span>");
+  if (it.attrChoiceEnabled) tags.push("<span style=\"color:#6ef5ff;font-size:2.6vw;\">🎯 使用后自选属性</span>");
+  if (it.isBox) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">🎁 奖励包</span>");
   if (bindMode === "carry") tags.push("<span style=\"color:#a78bfa;font-size:2.6vw;\">📚 携带绑副业</span>");
   else if (bindMode === "use") tags.push("<span style=\"color:#a78bfa;font-size:2.6vw;\">📚 使用绑副业</span>");
   if (discount > 0 && discount < 1) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">💰 " + Math.round(discount * 10) + "折</span>");
