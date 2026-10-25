@@ -1009,11 +1009,11 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
 
 /* ===== Toast / Modal ===== */
 
-.toast { position:fixed; top:18vw; left:50%; transform:translateX(-50%);
+.toast { position:fixed; top:calc(env(safe-area-inset-top, 0px) + 14px); left:50%; transform:translateX(-50%);
 
   background:rgba(0,0,0,.92); color:#fff; padding:3vw 6vw; border-radius:8px;
 
-  font-size:3.6vw; z-index:250; opacity:0; transition:.2s; pointer-events:none;
+  font-size:3.6vw; z-index:99999; opacity:0; transition:.2s; pointer-events:none;
 
   border:1px solid #ff4d5a; max-width:80vw; text-align:center;
   box-shadow:0 4px 16px rgba(0,0,0,.6); }
@@ -10333,7 +10333,14 @@ window.gmkItemSheet = function (itemId) {
   const useChance = parseInt(it.useChance) || 0;
   const bindMode = it.sidejobBindMode || "";
   const discount = parseFloat(it.discount) || 0;
-  const effectText = (typeof effectToTextClient === "function") ? effectToTextClient(it.effect) : "";
+  let effectText = (typeof effectToTextClient === "function") ? effectToTextClient(it.effect) : "";
+  if (it.attrChoiceEnabled) {
+    const _d = parseInt(it.attrChoiceDelta) || 0;
+    effectText = (effectText ? effectText + "　" : "") + "使用后选择一个七属性，统一 " + (_d > 0 ? "+" : "") + _d;
+  }
+  if (it.isBox) {
+    effectText = (effectText ? effectText + "　" : "") + "使用后获得奖励包";
+  }
   const isImg = it.icon && typeof it.icon === "string" && it.icon.indexOf("data:image/") === 0;
   const iconHtml = isImg
     ? `<img src="${escapeHtml(it.icon)}" style="width:100%;height:100%;object-fit:contain;">`
@@ -10342,6 +10349,8 @@ window.gmkItemSheet = function (itemId) {
   if (unlimitedUse) tags.push("<span style=\"color:#4d8cff;font-size:2.6vw;\">∞ 不消耗</span>");
   if (isPassive) tags.push("<span style=\"color:#2ee84e;font-size:2.6vw;\">💚 持有即生效</span>");
   if (useChance > 0) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">🎲 " + useChance + "/10 成功率</span>");
+  if (item.attrChoiceEnabled) tags.push("<span style=\"color:#6ef5ff;font-size:2.6vw;\">🎯 使用后自选属性</span>");
+  if (item.isBox) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">🎁 奖励包</span>");
   if (bindMode === "carry") tags.push("<span style=\"color:#a78bfa;font-size:2.6vw;\">📚 携带绑副业</span>");
   else if (bindMode === "use") tags.push("<span style=\"color:#a78bfa;font-size:2.6vw;\">📚 使用绑副业</span>");
   if (discount > 0 && discount < 1) tags.push("<span style=\"color:#ffd700;font-size:2.6vw;\">💰 " + Math.round(discount * 10) + "折</span>");
@@ -10390,6 +10399,79 @@ window.gmkInvClear = function () { window._invKw = ''; gmkInvRender(); };
 
 
 
+// ===== 属性自选道具：七属性弹窗（不含觉悟）=====
+let _attrChoicePending = null;
+let _attrChoiceBusy = false;
+
+async function openAttrChoice(itemId) {
+  let res = null;
+  try {
+    res = await api('/api/item/attrChoicePrompt', { dm: curId, item_id: itemId });
+  } catch (e) {
+    toast('属性选择打开失败：' + (e && e.message || e), 'err', 2600);
+    return;
+  }
+  if (!res || res.error) { toast((res && res.error) || '打开失败', 'err', 2600); return; }
+  const attrs = Array.isArray(res.attrs) ? res.attrs : [];
+  const current = res.current || {};
+  const delta = parseInt(res.delta) || 0;
+  _attrChoicePending = { token: res.token, itemId: itemId, delta: delta };
+  _attrChoiceBusy = false;
+  const sign = delta > 0 ? '+' : '';
+  const html = `
+    <div style="font-size:3.4vw;color:#fff;text-align:center;margin-bottom:1.4vw;">使用【${escapeHtml(res.item_name || '道具')}】后，请选择一个属性</div>
+    <div style="font-size:2.9vw;color:#ffd700;text-align:center;margin-bottom:2.4vw;">本次效果：${sign}${delta}　（选择后立即生效并关闭）</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2vw;">
+      ${attrs.map(function (a) {
+        const cur = parseInt(current[a.k]) || 0;
+        const next = cur + delta;
+        return `<button type="button" class="attr-choice-btn" data-attr="${escapeHtml(a.k)}"
+          onclick="chooseAttrChoice('${escapeHtml(a.k)}')"
+          style="padding:2.4vw 1.2vw;border:1px solid rgba(110,245,255,.35);border-radius:9px;
+            background:linear-gradient(160deg,rgba(77,140,255,.20),rgba(20,18,30,.92));color:#fff;cursor:pointer;text-align:center;">
+          <div style="font-size:3.2vw;font-weight:bold;">${escapeHtml(a.cn)}</div>
+          <div style="font-size:2.4vw;color:rgba(255,255,255,.55);margin-top:.6vw;">当前 ${cur}　→　${next}</div>
+        </button>`;
+      }).join('')}
+    </div>
+    <div style="font-size:2.4vw;color:rgba(255,255,255,.38);text-align:center;margin-top:2vw;">点击后立即生效，不能重复选择</div>
+  `;
+  showModal('🎯 选择自选属性', html, null, '关闭', null, true, null, false);
+}
+
+async function chooseAttrChoice(attr) {
+  if (_attrChoiceBusy) return;
+  const p = _attrChoicePending;
+  if (!p) return;
+  _attrChoiceBusy = true;
+  document.querySelectorAll('.attr-choice-btn').forEach(function (b) { b.disabled = true; b.style.opacity = '.45'; });
+  let res = null;
+  try {
+    res = await api('/api/item/attrChoiceApply', { dm: curId, item_id: p.itemId, token: p.token, attr: attr });
+  } catch (e) {
+    res = { error: '网络异常：' + (e && e.message || e) };
+  }
+  if (!res || res.error) {
+    // 达到上限/下限：保留窗口，让玩家换一个属性
+    if (res && res.cap) {
+      toast(res.error, 'err', 2600);
+      _attrChoiceBusy = false;
+      document.querySelectorAll('.attr-choice-btn').forEach(function (b) { b.disabled = false; b.style.opacity = '1'; });
+      return;
+    }
+    toast((res && res.error) || '使用失败', 'err', 2600);
+    _attrChoiceBusy = false;
+    try { closeModal(); } catch (e) { }
+    return;
+  }
+  try { closeModal(); } catch (e) { }
+  _attrChoicePending = null;
+  if (res.player) { curPlayer = res.player; renderPlayer(); }
+  const actual = parseInt(res.actual) || 0;
+  toast(`✨ ${res.attrName} ${actual >= 0 ? '+' : ''}${actual}`, 'ok', 1800);
+  try { await showInventory(); } catch (e) { }
+}
+
 async function useItem(itemId) {
 
   // 先拿背包当前数量
@@ -10408,6 +10490,11 @@ async function useItem(itemId) {
 
     return;
 
+  }
+
+  // 属性自选道具：不走数量输入，直接弹七属性选择
+  if (item.attrChoiceEnabled === true) {
+    return openAttrChoice(itemId);
   }
 
   const maxQty = item.qty || 1;
@@ -10435,7 +10522,10 @@ async function useItem(itemId) {
 
       const res = await api('/api/useItem', { dm: curId, item_id: itemId, qty });
 
-      if (res.error) return toast(res.error, 'err', 2500);
+      if (res.error) {
+        if (res.need_attr_choice) { closeModal(); return openAttrChoice(itemId); }
+        return toast(res.error, 'err', 2500);
+      }
 
       closeModal();
 

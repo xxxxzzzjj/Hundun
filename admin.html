@@ -3547,7 +3547,7 @@ function renderNewFeaturesHTML(prefix, it) {
   const sjOptions = (_libraryCache || []).filter(x => x.id).slice(0, 100).map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}（${escapeHtml(x.id)}）</option>`).join('');
   return `
     <div style="margin-top:2vw;padding:2vw;background:linear-gradient(90deg,rgba(46,232,78,.10),rgba(46,232,78,.02));border:1px solid rgba(46,232,78,.3);border-radius:8px;">
-      <div style="font-size:3vw;color:#2ee84e;font-weight:bold;margin-bottom:2vw;">🎮 5 个新功能（可选开启）</div>
+      <div style="font-size:3vw;color:#2ee84e;font-weight:bold;margin-bottom:2vw;">🎮 特殊使用功能（可选开启）</div>
       <!-- 1. 增益（持有即生效） -->
       <div style="display:flex;align-items:center;gap:2vw;padding:1.5vw 0;border-bottom:1px solid rgba(255,255,255,.08);">
         <input type="checkbox" id="${prefix}_isPassive" ${isPassive ? 'checked' : ''} style="width:4vw;height:4vw;cursor:pointer;">
@@ -3563,6 +3563,24 @@ function renderNewFeaturesHTML(prefix, it) {
           <div style="font-size:2.2vw;color:rgba(255,255,255,.5);">0=关闭；1-10 整数（3 = 30% 成功率）；失败 → 道具消耗 + 不生效</div>
         </div>
         <input type="number" id="${prefix}_useChance" min="0" max="10" value="${useChance}" style="width:60px;padding:1vw 1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.8vw;">
+      </div>
+      <!-- 2.5 属性自选 -->
+      <div style="padding:1.5vw 0;border-bottom:1px solid rgba(255,255,255,.08);">
+        <label style="display:flex;align-items:center;gap:2vw;cursor:pointer;">
+          <input type="checkbox" id="${prefix}_attrChoiceEnabled" ${(it.attrChoiceEnabled === true) ? 'checked' : ''}
+            onchange="toggleAttrChoiceSection('${prefix}');syncSpecialUseTypes('${prefix}','attr');" style="width:4vw;height:4vw;cursor:pointer;">
+          <span style="font-weight:bold;font-size:2.8vw;color:#4d8cff;">🎯 属性自选（使用后让玩家选一个七属性）</span>
+        </label>
+        <div id="${prefix}_attr_section" style="${(it.attrChoiceEnabled === true) ? 'margin-top:1.5vw;' : 'display:none;margin-top:1.5vw;'}">
+          <div style="font-size:2.2vw;color:rgba(255,255,255,.5);margin-bottom:1vw;">只显示：精神 / 感知 / 体魄 / 敏捷 / 魅力 / 血脉 / 悟性（不含觉悟）</div>
+          <div style="display:flex;align-items:center;gap:1.5vw;">
+            <span style="font-size:2.6vw;color:#fff;">统一增减值：</span>
+            <input type="number" id="${prefix}_attrChoiceDelta" min="-999" max="999" step="1"
+              value="${parseInt(it.attrChoiceDelta) || 0}" placeholder="正数增加 / 负数减少"
+              style="width:90px;padding:1vw 1.5vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.8vw;">
+            <span style="font-size:2.2vw;color:rgba(255,255,255,.45);">例如 +3 或 -2，不能为 0</span>
+          </div>
+        </div>
       </div>
       <!-- 3. 副业绑定（carry / use 二选一） -->
       <div style="padding:1.5vw 0;border-bottom:1px solid rgba(255,255,255,.08);">
@@ -3597,10 +3615,11 @@ function renderNewFeaturesHTML(prefix, it) {
       <!-- 5. 宝盒配置（开箱得多个道具） -->
       <div style="margin-top:2vw;padding:1.5vw;background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);border-radius:6px;">
         <div style="display:flex;align-items:center;gap:2vw;margin-bottom:1.5vw;">
-          <input type="checkbox" id="${prefix}_isBox" ${(it.isBox === true) ? 'checked' : ''} style="width:4vw;height:4vw;cursor:pointer;">
+          <input type="checkbox" id="${prefix}_isBox" ${(it.isBox === true) ? 'checked' : ''}
+            onchange="toggleBoxSection('${prefix}');syncSpecialUseTypes('${prefix}','box');" style="width:4vw;height:4vw;cursor:pointer;">
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:bold;font-size:2.8vw;color:#ffd700;">🎁 宝盒（开启后获得多个道具）</div>
-            <div style="font-size:2.2vw;color:rgba(255,255,255,.5);">勾选后玩家点击使用此道具会触发开箱；只能从仓库区已存在的道具里选（最多 10 个）</div>
+            <div style="font-weight:bold;font-size:2.8vw;color:#ffd700;">🎁 宝盒 / 奖励包（开启后获得道具）</div>
+            <div style="font-size:2.2vw;color:rgba(255,255,255,.5);">保留原宝盒功能：全拿或随机抽 1 个；每个奖励可设固定数量或随机数量范围（1~999），最多 10 个。和属性自选只能开启一个。</div>
           </div>
         </div>
         <div id="${prefix}_box_section" style="${(it.isBox === true) ? '' : 'display:none;'}">
@@ -3631,27 +3650,46 @@ function collectNewFeatures(prefix) {
   const bindIds = bindIdsRaw ? bindIdsRaw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10) : [];
   const bindInitCount = Math.max(0, parseInt($(`${prefix}_bindInitCount`).value) || 0);
   const discount = Math.max(0, Math.min(1, parseFloat($(`${prefix}_discount`).value) || 0));
+  // 属性自选
+  const attrChoiceEnabled = !!($(`${prefix}_attrChoiceEnabled`) && $(`${prefix}_attrChoiceEnabled`).checked);
+  const attrChoiceDelta = Math.max(-999, Math.min(999, parseInt(($(`${prefix}_attrChoiceDelta`) || {}).value) || 0));
   // 宝盒配置
-  const isBox = $(`${prefix}_isBox`).checked;
+  let isBox = !!($(`${prefix}_isBox`) && $(`${prefix}_isBox`).checked);
   let boxItems = [];
   let boxQuantities = {};
+  let boxQtyRules = {};
+  let boxRandomOne = false;
+  if (attrChoiceEnabled) isBox = false;   // 二选一，属性自选优先
   if (isBox) {
     const boxRandomOneEl = document.querySelector(`input[name="${prefix}_boxRandom"]:checked`);
-    const boxRandomOne = boxRandomOneEl && boxRandomOneEl.value === '1';
-    // 收集所有 ${prefix}_boxItem_id / _boxItem_qty 行
+    boxRandomOne = boxRandomOneEl && boxRandomOneEl.value === '1';
+    // 收集所有奖励行；每行独立固定/随机数量
     document.querySelectorAll(`#${prefix}_boxItems_list .box-row`).forEach(row => {
       const idEl = row.querySelector('.box-id');
+      const modeEl = row.querySelector('.box-qty-mode');
       const qtyEl = row.querySelector('.box-qty');
+      const minEl = row.querySelector('.box-qty-min');
+      const maxEl = row.querySelector('.box-qty-max');
       const id = idEl && idEl.value.trim();
-      const qty = parseInt(qtyEl && qtyEl.value) || 1;
-      if (id) {
-        boxItems.push(id);
-        boxQuantities[id] = Math.max(1, qty);
-      }
+      if (!id || boxItems.indexOf(id) >= 0) return;
+      const mode = (modeEl && modeEl.value === 'random') ? 'random' : 'fixed';
+      const qty = Math.max(1, Math.min(999, parseInt(qtyEl && qtyEl.value) || 1));
+      let min = Math.max(1, Math.min(999, parseInt(minEl && minEl.value) || 1));
+      let max = Math.max(1, Math.min(999, parseInt(maxEl && maxEl.value) || min));
+      if (max < min) { const t = min; min = max; max = t; }
+      boxItems.push(id);
+      boxQuantities[id] = qty;
+      boxQtyRules[id] = mode === 'random'
+        ? { mode: 'random', min: min, max: max }
+        : { mode: 'fixed', qty: qty };
     });
-    boxItems = boxItems.slice(0, 10);  // 最多 10 个
+    boxItems = boxItems.slice(0, 10);
   }
-  return { isPassive, useChance, sidejobBindMode: bindMode, sidejobBindIds: bindIds, sidejobBindInitCount: bindInitCount, discount, isBox, boxItems, boxQuantities, boxRandomOne: isBox && boxItems.length ? (document.querySelector(`input[name="${prefix}_boxRandom"]:checked`) || {}).value === '1' : false };
+  return {
+    isPassive, useChance, sidejobBindMode: bindMode, sidejobBindIds: bindIds, sidejobBindInitCount: bindInitCount,
+    discount, isBox, boxItems, boxQuantities, boxQtyRules, boxRandomOne,
+    attrChoiceEnabled, attrChoiceDelta: attrChoiceEnabled ? attrChoiceDelta : 0,
+  };
 }
 
 // 通用 toggle switch（绿色√开启 / 红x关闭）—— 比 select 更直观
@@ -3700,18 +3738,34 @@ function clearNewItemDraft() {
   try { localStorage.removeItem(LS_NEW_ITEM_KEY); } catch (e) {}
 }
 
-// 宝盒道具行添加（admin 配置宝盒时一行一个道具）
-function addBoxItemRow(prefix, initItemId, initQty) {
+// 奖励包道具行添加（每行独立：固定数量 / 随机范围）
+function addBoxItemRow(prefix, initItemId, initQty, initRule) {
   const container = $(`${prefix}_boxItems_list`);
   if (!container) return;
   // 从仓库区所有道具生成 datalist
   const libOptions = (_libraryCache || []).map(it => `<option value="${escapeHtml(it.id)}">${escapeHtml(it.name || it.id)}</option>`).join('');
+  const rule = initRule || {};
+  const mode = rule.mode === 'random' ? 'random' : 'fixed';
+  const qty = Math.max(1, Math.min(999, parseInt(rule.qty) || parseInt(initQty) || 1));
+  const min = Math.max(1, Math.min(999, parseInt(rule.min) || 1));
+  const max = Math.max(min, Math.min(999, parseInt(rule.max) || 30));
   const row = document.createElement('div');
   row.className = 'box-row';
-  row.style.cssText = 'display:flex;gap:1vw;align-items:center;margin-bottom:.5vw;';
+  row.style.cssText = 'display:flex;gap:1vw;align-items:center;margin-bottom:.5vw;flex-wrap:wrap;';
   row.innerHTML = `
-    <input class="box-id" list="${prefix}_boxItems_datalist" value="${escapeHtml(initItemId || '')}" placeholder="选仓库区道具" style="flex:1;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:2.6vw;">
-    <input class="box-qty" type="number" min="1" value="${escapeHtml(String(initQty || 1))}" style="width:60px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.6vw;">
+    <input class="box-id" list="${prefix}_boxItems_datalist" value="${escapeHtml(initItemId || '')}" placeholder="选仓库区道具" style="flex:1 1 150px;min-width:110px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:2.6vw;">
+    <select class="box-qty-mode" onchange="boxQtyModeChanged(this)" style="width:72px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;font-size:2.4vw;">
+      <option value="fixed"${mode === 'fixed' ? ' selected' : ''}>固定</option>
+      <option value="random"${mode === 'random' ? ' selected' : ''}>随机</option>
+    </select>
+    <span class="box-fixed-wrap" style="display:${mode === 'fixed' ? '' : 'none'};">
+      <input class="box-qty" type="number" min="1" max="999" value="${qty}" style="width:55px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.6vw;">
+    </span>
+    <span class="box-random-wrap" style="display:${mode === 'random' ? '' : 'none'};white-space:nowrap;font-size:2.4vw;color:rgba(255,255,255,.65);">
+      <input class="box-qty-min" type="number" min="1" max="999" value="${min}" style="width:48px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.4vw;">
+      <span>~</span>
+      <input class="box-qty-max" type="number" min="1" max="999" value="${max}" style="width:48px;padding:1vw;background:#222;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;font-size:2.4vw;">
+    </span>
     <button type="button" class="mini-op" onclick="this.parentElement.remove()" style="background:rgba(255,77,90,.2);border:1px solid #ff4d5a;color:#fff;">✕</button>
   `;
   container.appendChild(row);
@@ -3723,6 +3777,33 @@ function addBoxItemRow(prefix, initItemId, initQty) {
     document.body.appendChild(dl);
   }
   dl.innerHTML = libOptions;
+}
+
+function toggleAttrChoiceSection(prefix) {
+  const cb = $(`${prefix}_attrChoiceEnabled`);
+  const sec = $(`${prefix}_attr_section`);
+  if (sec) sec.style.display = cb && cb.checked ? '' : 'none';
+}
+// 属性自选 / 奖励包互斥：以刚刚勾选的那个为准
+function syncSpecialUseTypes(prefix, changed) {
+  const a = $(`${prefix}_attrChoiceEnabled`);
+  const b = $(`${prefix}_isBox`);
+  if (a && b && a.checked && b.checked) {
+    if (changed === 'box') a.checked = false;
+    else b.checked = false;
+  }
+  toggleAttrChoiceSection(prefix);
+  toggleBoxSection(prefix);
+}
+// 单行奖励包：固定数量 / 随机数量切换
+function boxQtyModeChanged(sel) {
+  const row = sel && sel.closest ? sel.closest('.box-row') : null;
+  if (!row) return;
+  const random = sel.value === 'random';
+  const fixedWrap = row.querySelector('.box-fixed-wrap');
+  const randomWrap = row.querySelector('.box-random-wrap');
+  if (fixedWrap) fixedWrap.style.display = random ? 'none' : '';
+  if (randomWrap) randomWrap.style.display = random ? '' : 'none';
 }
 
 // 宝盒勾选状态切换（显示/隐藏 box_section）
@@ -3811,15 +3892,21 @@ function showCreateItem() {
       hide_use: fields.hide_use,
       hide_gift: fields.hide_gift,
       flight_mode: fields.flight_mode,
-      newFeatures: { isPassive: fields.isPassive, useChance: fields.useChance, sidejobBindMode: fields.sidejobBindMode, sidejobBindIds: fields.sidejobBindIds, sidejobBindInitCount: fields.sidejobBindInitCount, discount: fields.discount, isBox: fields.isBox, boxItems: fields.boxItems, boxQuantities: fields.boxQuantities, boxRandomOne: fields.boxRandomOne },
+      newFeatures: { isPassive: fields.isPassive, useChance: fields.useChance, sidejobBindMode: fields.sidejobBindMode, sidejobBindIds: fields.sidejobBindIds, sidejobBindInitCount: fields.sidejobBindInitCount, discount: fields.discount, isBox: fields.isBox, boxItems: fields.boxItems, boxQuantities: fields.boxQuantities, boxQtyRules: fields.boxQtyRules, boxRandomOne: fields.boxRandomOne, attrChoiceEnabled: fields.attrChoiceEnabled, attrChoiceDelta: fields.attrChoiceDelta },
     });
     toast(`已创建（ID: ${res.id || idRaw || '自动'}）`); closeModal(); loadItemsAdmin();
   });
   // 绑定图片上传
   setTimeout(() => {
     bindImageUpload('i_icon_file', 'i_icon', 'i_icon_preview', 60 * 1024);
-    // 宝盒勾选切换（新建道具默认无 boxItems）
-    const cb = $("i_isBox"); if (cb) cb.onchange = () => toggleBoxSection('i');
+    // 宝盒勾选切换
+    const cb = $("i_isBox"); if (cb) cb.onchange = () => { toggleBoxSection('i'); syncSpecialUseTypes('i','box'); };
+    // 恢复上次新建时填过的奖励包行
+    const nf = draft.newFeatures || {};
+    (Array.isArray(nf.boxItems) ? nf.boxItems : []).forEach(id =>
+      addBoxItemRow('i', id, (nf.boxQuantities && nf.boxQuantities[id]) || 1, (nf.boxQtyRules && nf.boxQtyRules[id]) || null)
+    );
+    try { syncSpecialUseTypes('i'); } catch (e) { }
   }, 50);
 }
 
@@ -3892,10 +3979,11 @@ async function editLibraryItem(id) {
   setTimeout(() => {
     bindImageUpload('ei_icon_file', 'ei_icon', 'ei_icon_preview', 60 * 1024);
     // 宝盒勾选切换
-    const cb = $("ei_isBox"); if (cb) cb.onchange = () => toggleBoxSection('ei');
+    const cb = $("ei_isBox"); if (cb) cb.onchange = () => { toggleBoxSection('ei'); syncSpecialUseTypes('ei','box'); };
     // 渲染已有 boxItems 行
     const items = Array.isArray(it.boxItems) ? it.boxItems : [];
-    items.forEach(id => addBoxItemRow('ei', id, (it.boxQuantities && it.boxQuantities[id]) || 1));
+    items.forEach(id => addBoxItemRow('ei', id, (it.boxQuantities && it.boxQuantities[id]) || 1, (it.boxQtyRules && it.boxQtyRules[id]) || null));
+    try { syncSpecialUseTypes('ei'); } catch (e) { }
   }, 50);
 }
 
@@ -4006,10 +4094,10 @@ async function editShopEntry(id) {
   setTimeout(() => {
     bindImageUpload('es_icon_file', 'es_icon', 'es_icon_preview', 60 * 1024);
     // 宝盒勾选切换
-    const cb = $("es_isBox"); if (cb) cb.onchange = () => toggleBoxSection('es');
+    const cb = $("es_isBox"); if (cb) cb.onchange = () => { toggleBoxSection('es'); syncSpecialUseTypes('es','box'); };
     // 渲染已有 boxItems 行
     const items = Array.isArray(it.boxItems) ? it.boxItems : [];
-    items.forEach(id => addBoxItemRow('es', id, (it.boxQuantities && it.boxQuantities[id]) || 1));
+    items.forEach(id => addBoxItemRow('es', id, (it.boxQuantities && it.boxQuantities[id]) || 1, (it.boxQtyRules && it.boxQtyRules[id]) || null));
   }, 50);
 }
 
