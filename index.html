@@ -1475,6 +1475,29 @@ input[type=range] { width:100%; accent-color:#e33; margin:1vw 0 3vw; touch-actio
   .hall-hero { --hero-r:calc(var(--hero-size) * .37); height:clamp(280px, 42vh, 340px); }
   .hero-btn-label { font-size:2.1vw; }
 }
+/* 手机端性能优化：保留观感，降低最吃 GPU 的混合/滤镜/背景模糊 */
+@media (max-width:760px) {
+  #hallFx { mix-blend-mode:normal; opacity:.78; }
+  .info-panel {
+    /* 面板本身已经 92% 不透明，移动端不需要再实时模糊整块背景 */
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+    background:rgba(25,23,33,.97);
+  }
+  .hero-btn-inner {
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+  }
+  .hero-ambient { filter:blur(13px); animation:none; }
+  .hero-avatar-wrap {
+    filter:drop-shadow(0 0 16px rgba(255,77,90,.28));
+    animation-duration:2.4s;
+  }
+  .hero-avatar-wrap::before { filter:blur(14px); animation:none; }
+  .hero-avatar-wrap::after { animation:none; }
+  .hero-btn::before { filter:blur(3px); animation:none; opacity:.4; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-orbit, .hero-btn-inner, .hero-avatar-wrap, .hero-avatar-ring, .hero-ray, .hero-ambient, .merged-notice::before { animation:none !important; }
   .hero-ray { opacity:.25; }
@@ -11659,13 +11682,13 @@ async function viewFriend(friendId) {
   if (res.error) return toast(res.error, 'err');
   const f = res.friend;
   let placeName = '--';
-  let placeObj = null;
   if (f.place_id) {
     const p = PLACES.find(x => String(x.id) === String(f.place_id));
-    if (p) { placeName = p.name; placeObj = p; }
+    if (p) placeName = p.name;
   }
   //   （防止地图上圆点被占满，导致玩家点不到地区）
-  if (placeObj) { try { showPlaceInfo(placeObj); } catch (e) { } }
+  // 注意：这里不能自动 showPlaceInfo。
+  // 好友资料/背包是弹窗，自动打开地区介绍会留在弹窗下面，关闭背包后突然出现，像用户误点了地区。
   // 称号已在 friendDetail 里返回（真称号 + 打工临时称号）
   let html = buildPlayerCard(f, f.uid, { placeName: placeName, hideStats: true });
     const _st = [
@@ -16383,68 +16406,30 @@ window.gmkDoUseCard = function (cardId, target, targets) {
 
   const COLORS = ['110,245,255', '77,140,255', '255,77,90', '192,132,252', '255,215,0'];
   const rand = (a, b) => a + Math.random() * (b - a);
+  // 手机/低配设备降质：减少粒子与云雾数量、降低 DPR、限制到 30fps
+  const _isMobile = window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+  const _lowPower = _isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+  const _targetFps = _lowPower ? 30 : 60;
+  const _maxDpr = _lowPower ? 1.25 : 2;
   let W = 1, H = 1, DPR = 1, raf = 0, running = false, last = 0, nextBolt = 0, flash = 0;
   let particles = [], bits = [], bolts = [];
-  let fogSprites = [], clouds = [];
 
   function makeParticles() {
-    const n = Math.min(88, Math.max(34, Math.floor(W * H / 14000)));
+    const n = _lowPower
+      ? Math.min(40, Math.max(18, Math.floor(W * H / 26000)))
+      : Math.min(88, Math.max(34, Math.floor(W * H / 14000)));
     particles = Array.from({ length: n }, (_, i) => ({
       x: rand(0, W), y: rand(0, H),
       vx: rand(-0.18, 0.18), vy: rand(-0.55, -0.12),
       r: rand(0.7, 2.6), c: COLORS[i % COLORS.length],
       a: rand(0.3, 0.9), tw: rand(0, Math.PI * 2)
     }));
-    const bn = Math.min(30, Math.max(12, Math.floor(W / 28)));
+    const bn = _lowPower ? Math.min(12, Math.max(6, Math.floor(W / 55))) : Math.min(30, Math.max(12, Math.floor(W / 28)));
     bits = Array.from({ length: bn }, () => ({
       x: rand(0, W), y: rand(0, H), sp: rand(25, 65),
       s: Math.random() < 0.5 ? '0' : '1',
       a: rand(0.12, 0.35),
       c: COLORS[(Math.random() * COLORS.length) | 0]
-    }));
-    makeClouds();
-  }
-
-  function makeFogSprites() {
-    if (fogSprites.length) return;
-    const tints = [
-      ['120,220,255', '80,150,255'],
-      ['180,150,255', '110,90,220'],
-      ['220,225,255', '140,180,255']
-    ];
-    for (let k = 0; k < tints.length; k++) {
-      const c = document.createElement('canvas');
-      c.width = 360; c.height = 180;
-      const g = c.getContext('2d');
-      for (let i = 0; i < 9; i++) {
-        const cx = 40 + Math.random() * 280;
-        const cy = 55 + Math.random() * 70;
-        const r = 38 + Math.random() * 72;
-        const grd = g.createRadialGradient(cx, cy, 0, cx, cy, r);
-        const tone = tints[k][i % 2];
-        grd.addColorStop(0, 'rgba(' + tone + ',.38)');
-        grd.addColorStop(.55, 'rgba(' + tone + ',.14)');
-        grd.addColorStop(1, 'rgba(' + tone + ',0)');
-        g.fillStyle = grd;
-        g.beginPath();
-        g.arc(cx, cy, r, 0, Math.PI * 2);
-        g.fill();
-      }
-      fogSprites.push(c);
-    }
-  }
-
-  function makeClouds() {
-    makeFogSprites();
-    // 云层数量随宽度增加，保证手机端也有足够的云雾在飘
-    const n = Math.max(14, Math.min(26, Math.floor(W / 30)));
-    clouds = Array.from({ length: n }, () => ({
-      x: rand(-W * 0.35, W),
-      y: rand(H * 0.08, H * 0.98),
-      s: rand(0.7, 2.0),
-      v: rand(4, 17),
-      a: rand(0.16, 0.36),
-      spr: (Math.random() * fogSprites.length) | 0
     }));
   }
 
@@ -16453,7 +16438,7 @@ window.gmkDoUseCard = function (cardId, target, targets) {
     const r = canvas.getBoundingClientRect();
     const w = Math.max(1, Math.floor(r.width || host.clientWidth || 1));
     const h = Math.max(1, Math.floor(r.height || host.clientHeight || 1));
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    DPR = Math.min(_maxDpr, window.devicePixelRatio || 1);
     const pw = Math.floor(w * DPR), ph = Math.floor(h * DPR);
     if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
     const _changed = (W !== w || H !== h);
@@ -16505,26 +16490,15 @@ window.gmkDoUseCard = function (cardId, target, targets) {
   function frame(ts) {
     if (!running) return;
     if (!last) last = ts;
+    // 低配设备锁 30fps；桌面最多 60fps
+    const gap = 1000 / _targetFps - 1;
+    if (ts - last < gap) { raf = requestAnimationFrame(frame); return; }
     const dt = Math.min(0.05, (ts - last) / 1000);
     last = ts;
 
     ctx.clearRect(0, 0, W, H);
 
-    // 云雾层：大量低速横移的柔光云团，位于粒子/数据流后面
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    for (const c of clouds) {
-      c.x += c.v * dt;
-      if (c.x > W + 360 * c.s) {
-        c.x = -360 * c.s;
-        c.y = rand(H * 0.08, H * 0.98);
-      }
-      ctx.globalAlpha = c.a;
-      ctx.drawImage(fogSprites[c.spr], c.x, c.y, 360 * c.s, 180 * c.s);
-    }
-    ctx.restore();
-
-    drawGrid();
+    if (!_lowPower) drawGrid();   // 手机端省略每帧网格线，省一笔全屏描边
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
