@@ -10313,8 +10313,19 @@ window.gmkInvRender = function () {
   c.innerHTML = html;
 };
 
-window.gmkItemSheet = function (itemId) {
-  const it = (window._invItems || []).filter(function (x) { return x.item_id === itemId; })[0];
+window.gmkItemSheet = async function (itemId) {
+  let it = (window._invItems || []).filter(function (x) { return x.item_id === itemId; })[0];
+  // 打开道具详情时重新拉一次背包定义：
+  // 后台刚改的 不消耗/隐藏使用/隐藏赠送/飞行模式 可以立即反映，不用重新登录。
+  try {
+    if (curId) {
+      const inv = await api('/api/inventory?id=' + encodeURIComponent(curId));
+      if (inv && inv.ok && Array.isArray(inv.items)) {
+        window._invItems = inv.items;
+        it = inv.items.filter(function (x) { return x.item_id === itemId; })[0] || it;
+      }
+    }
+  } catch (e) { }
   if (!it) { toast("背包里没有此道具", "err", 2000); return; }
   const cat = it.category || "item";
   const CT = {
